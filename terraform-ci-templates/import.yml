@@ -1,0 +1,3 @@
+include:
+  - local: "template/terraform-validation.yml"
+  - local: "template/terraform-registry-publish.yml"

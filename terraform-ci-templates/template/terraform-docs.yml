@@ -1,0 +1,32 @@
+formatter: "markdown table"
+output:
+  file: "README.md"
+  mode: "inject"
+
+# Only include Inputs and Outputs sections
+sections:
+  header: true
+  inputs: true
+  outputs: true
+  providers: false
+  resources: false
+  requirements: false
+  data-sources: false
+
+# Sort configuration
+sort:
+  enabled: true
+  by: "name"
+
+# Settings
+settings:
+  anchor: true
+  default: true
+  description: true
+  escape: true
+  hide: false
+  hide-empty: false
+  indent: 2
+  required: true
+  sensitive: true
+  type: true

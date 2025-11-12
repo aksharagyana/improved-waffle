@@ -1,0 +1,13 @@
+source_registry: registry.source.com/myproject
+target_registry: registry.target.com/myproject
+
+images:
+  - name: myapp
+    tags:
+      - latest
+      - "1.0"
+      - "1.1"
+  - name: worker
+    tags:
+      - latest
+      - "2.0"

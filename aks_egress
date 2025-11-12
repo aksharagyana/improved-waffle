@@ -1,0 +1,12 @@
+| Hostname / FQDN                                                                      | Port | Protocol | Purpose                                                                |
+| ------------------------------------------------------------------------------------ | ---- | -------- | ---------------------------------------------------------------------- |
+| `mcr.microsoft.com`                                                                  | 443  | HTTPS    | Pull base container images (system/infra images).                      |
+| `*.data.mcr.microsoft.com` / `mcr-0001.mcr-msedge.net`                               | 443  | HTTPS    | CDN endpoints for Microsoft Container Registry.                        |
+| `acs-mirror.azureedge.net`                                                           | 443  | HTTPS    | Download AKS required binaries (Azure CNI, kubenet, kube-proxy, etc.). |
+| `packages.aks.azure.com`                                                             | 443  | HTTPS    | Kubernetes/Azure CNI binaries and updates.                             |
+| `<region>.dp.kubernetesconfiguration.azure.com`                                      | 443  | HTTPS    | Cluster Extensions service (region-specific).                          |
+| `arcmktplaceprod.azurecr.io` and regional variants                                   | 443  | HTTPS    | Container images for extensions/marketplace add-ons.                   |
+| `*.monitoring.azure.com`, `*.ods.opinsights.azure.com`, `*.oms.opinsights.azure.com` | 443  | HTTPS    | Azure Monitor / Log Analytics agent traffic.                           |
+| `*.ingestion.msftcloudes.com`, `*.microsoftmetrics.com`                              | 443  | HTTPS    | Telemetry & metrics ingestion from AKS agents.                         |
+| `marketplaceapi.microsoft.com`                                                       | 443  | HTTPS    | Commerce/metering API for AKS extensions.                              |
+| `onecollector.cloudapp.aria.microsoft.com`                                           | 443  | HTTPS    | Diagnostics and telemetry.                                             |

@@ -1,0 +1,49 @@
+stages:
+  - copy-images
+
+variables:
+  DOCKER_CLI_EXPERIMENTAL: enabled
+
+# Docker-in-Docker service is needed for buildx
+services:
+  - docker:24-dind
+
+before_script:
+  # Login to source and target registries using CI/CD variables
+  - echo "$SOURCE_REGISTRY_PASSWORD" | docker login $SOURCE_REGISTRY -u "$SOURCE_REGISTRY_USERNAME" --password-stdin
+  - echo "$TARGET_REGISTRY_PASSWORD" | docker login $TARGET_REGISTRY -u "$TARGET_REGISTRY_USERNAME" --password-stdin
+  # Create and use a buildx builder
+  - docker buildx create --use --name mybuilder || docker buildx use mybuilder
+
+copy_images:
+  stage: copy-images
+  image: python:3.11   # Python image to parse YAML
+  script:
+    # Install docker CLI inside python image
+    - apt-get update && apt-get install -y docker.io
+    - pip install pyyaml
+
+    # Parse YAML and run docker buildx imagetools create
+    - |
+      python <<'EOF'
+      import yaml, subprocess
+
+      with open("images.yaml") as f:
+          data = yaml.safe_load(f)
+
+      src = data["source_registry"]
+      dst = data["target_registry"]
+
+      for img in data["images"]:
+          name = img["name"]
+          for tag in img["tags"]:
+              source_ref = f"{src}/{name}:{tag}"
+              target_ref = f"{dst}/{name}:{tag}"
+              print(f"📦 Copying {source_ref} -> {target_ref}")
+              subprocess.run([
+                  "docker", "buildx", "imagetools", "create",
+                  "--tag", target_ref, source_ref
+              ], check=True)
+      EOF
+  only:
+    - main

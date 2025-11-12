@@ -1,0 +1,52 @@
+.terraform_registry_default: &terraform_default
+  image:
+    name: debian:stable-slim
+    entrypoint: [""]
+  before_script:
+    - apt-get update -y
+    - apt-get install -y git curl jq rsync
+    - git config --global user.email "ci@gitlab.com"
+    - git config --global user.name "GitLab CI"
+    - mkdir -p "${RUNNER_TEMP_PROJECT_DIR}/terraform-ci-templates"
+    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@${TERRAFORM_CI_TEMPLATES_REPO} ${RUNNER_TEMP_PROJECT_DIR}/terraform-ci-templates
+
+
+# Parse semantic commit messages and determine version bump
+determine_version:
+  <<: *terraform_default
+  stage: version
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+  script:
+    - chmod +x ${RUNNER_TEMP_PROJECT_DIR}/terraform-ci-templates/scripts/determine-version.sh
+    - bash ${RUNNER_TEMP_PROJECT_DIR}/terraform-ci-templates/scripts/determine-version.sh
+  artifacts:
+    paths:
+      - version.env
+      - set_version.sh
+    expire_in: 1 hour
+
+# Create and push git tag
+create_tag:
+  <<: *terraform_default
+  stage: tag
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success
+  script:
+    - chmod +x ${RUNNER_TEMP_PROJECT_DIR}/terraform-ci-templates/scripts/create-tag.sh
+    - bash ${RUNNER_TEMP_PROJECT_DIR}/terraform-ci-templates/scripts/create-tag.sh
+
+# Publish to GitLab Terraform Registry using tag version
+publish_to_registry:
+  <<: *terraform_default
+  stage: publish
+  rules:
+    - if: '$CI_COMMIT_TAG'
+  variables:
+    TERRAFORM_MODULE_SYSTEM: "azure"
+  script:
+    - echo "Publishing module version $CI_COMMIT_TAG to registry..."
+    - chmod +x ${RUNNER_TEMP_PROJECT_DIR}/terraform-ci-templates/scripts/publish-to-registry.sh
+    - bash ${RUNNER_TEMP_PROJECT_DIR}/terraform-ci-templates/scripts/publish-to-registry.sh

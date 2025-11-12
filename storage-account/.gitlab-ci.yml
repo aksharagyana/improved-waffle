@@ -1,0 +1,19 @@
+include:
+  - project: 'shivanaranaya111-group/terraform-ci-templates'
+    ref: 'main'
+    file: 'import.yml'
+
+# Pipeline variables
+variables:
+  TF_ROOT: ${CI_PROJECT_DIR}
+  TF_VERSION: "1.13.3"
+
+# Pipeline stages
+stages:
+  - validate
+  - security
+  - documentation
+  - version
+  - tag
+#  - build
+  - publish
