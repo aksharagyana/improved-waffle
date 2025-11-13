@@ -35,6 +35,20 @@ stop_timeout=10
 default_rootless_network_cmd="slirp4netns"
 EOF
 
+mkdir -p "$HOME/.config/containers" && cat > "$HOME/.config/containers/storage.conf" << EOF
+[storage]
+driver = "overlay"
+runroot = "$HOME/containers"
+graphroot = "$HOME/.local/share/containers/storage"
+[storage.options]
+additionalimagestores = []
+size = ""
+override_kernel_check = "true"
+[storage.options.overlay]
+mount_program = "/usr/bin/fuse-overlayfs"
+mountopt = "nodev,fsync=0"
+EOF
+
 # Create storage.conf for rootless
 cat > ~/.config/containers/storage.conf << 'EOF'
 [storage]
