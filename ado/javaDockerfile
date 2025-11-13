@@ -1,0 +1,94 @@
+# ============================================================
+# CI Image: Java 21 + Maven + Gradle + Azure CLI + jq + BuildKit
+# Base: mcr.microsoft.com/openjdk/jdk:21-azurelinux
+# Auto-fetches latest versions at build time
+# ============================================================
+
+FROM mcr.microsoft.com/openjdk/jdk:21-azurelinux
+
+# Labels
+LABEL maintainer="your-team@company.com" \
+      description="Java 21 CI image with Maven, Gradle, Azure CLI, jq, BuildKit (daemonless)" \
+      version="1.0"
+
+# Environment
+ENV JAVA_HOME=/opt/java/openjdk \
+    PATH="/opt/maven/bin:/opt/gradle/bin:/opt/buildkit/bin:${PATH}"
+
+# -------------------------------
+# 1. Install system dependencies
+# -------------------------------
+RUN dnf update -y && \
+    dnf install -y \
+        curl \
+        git \
+        jq \
+        unzip \
+        tar \
+        gzip \
+        ca-certificates \
+        epel-release \
+    && dnf clean all
+
+# -------------------------------
+# 2. Install Azure CLI (latest)
+# -------------------------------
+RUN curl -fsSL https://aka.ms/InstallAzureCLIDeb | bash
+
+# -------------------------------
+# 3. Install Maven (latest via dnf)
+# -------------------------------
+RUN dnf install -y maven && \
+    ln -s /usr/share/maven/bin/mvn /usr/local/bin/mvn
+
+# -------------------------------
+# 4. Install Gradle (latest via dnf)
+# -------------------------------
+RUN dnf install -y gradle && \
+    ln -s /usr/bin/gradle /usr/local/bin/gradle
+
+# -------------------------------
+# 5. Install BuildKit (latest from GitHub)
+# -------------------------------
+RUN set -eux; \
+    # Get latest BuildKit version from GitHub API
+    LATEST_BUILDKIT=$(curl -s https://api.github.com/repos/moby/buildkit/releases/latest | \
+        jq -r '.tag_name' | sed 's/^v//'); \
+    \
+    # Download and extract
+    curl -fsSL "https://github.com/moby/buildkit/releases/download/v${LATEST_BUILDKIT}/buildkit-v${LATEST_BUILDKIT}.linux-amd64.tar.gz" \
+        | tar -xz -C /opt; \
+    \
+    # Move binaries
+    mkdir -p /opt/buildkit/bin; \
+    mv /opt/bin/buildctl* /opt/buildkit/bin/; \
+    chmod +x /opt/buildkit/bin/buildctl-daemonless.sh; \
+    \
+    # Symlink
+    ln -s /opt/buildkit/bin/buildctl-daemonless.sh /usr/local/bin/buildctl-daemonless.sh; \
+    \
+    # Verify
+    buildctl-daemonless.sh --version
+
+# -------------------------------
+# 6. Final verification
+# -------------------------------
+RUN echo "Verifying installations..." && \
+    java -version && \
+    mvn --version && \
+    gradle --version && \
+    az --version | head -1 && \
+    jq --version && \
+    buildctl-daemonless.sh --version
+
+# -------------------------------
+# 7. Setup workspace
+# -------------------------------
+WORKDIR /workspace
+VOLUME /workspace
+
+# Optional: Run as non-root (recommended)
+# RUN useradd -m -s /bin/bash devops
+# USER devops
+
+CMD ["/bin/bash"]

@@ -1,0 +1,105 @@
+trigger:
+- main
+
+variables:
+  acrName: myacr
+  imageName: myapp
+  mavenCacheFolder: $(Pipeline.Workspace)/.m2/repository
+  mavenCacheKey: 'maven | "$(Agent.OS)" | pom.xml'
+
+pool:
+  name: my-vmss-pool
+
+jobs:
+- job: build_and_push
+  container:
+    image: moby/buildkit:rootless
+    # No socket mount needed — daemonless!
+  steps:
+  - checkout: self
+
+ # Cache .m2
+  - task: Cache@2
+    inputs:
+      key: '$(mavenCacheKey)'
+      path: $(mavenCacheFolder)
+      cacheHitVar: MAVEN_CACHE_RESTORED
+
+  - script: |
+      mkdir -p ~/.m2
+      ln -s $(mavenCacheFolder) ~/.m2/repository
+    displayName: Link cache
+  
+
+# ─── Auth: settings.xml ───
+  - script: |
+      cat > ~/.m2/settings.xml <<'EOF'
+      <settings>
+        <servers>
+          <server>
+            <id>central-proxy</id>
+            <username>$(MAVEN_USERNAME)</username>
+            <password>$(MAVEN_PASSWORD)</password>
+          </server>
+        </servers>
+        <mirrors>
+          <mirror>
+            <id>central-proxy</id>
+            <mirrorOf>central</mirrorOf>
+            <url>$(MAVEN_REPO_URL)</url>
+          </mirror>
+        </mirrors>
+      </settings>
+      EOF
+    env:
+      MAVEN_USERNAME: $(MAVEN_USERNAME)
+      MAVEN_PASSWORD: $(MAVEN_PASSWORD)
+      MAVEN_REPO_URL: $(MAVEN_REPO_URL)
+    displayName: Create settings.xml
+
+  - script: mvn -s ~/.m2/settings.xml -Dmaven.repo.local=~/.m2/repository clean verify
+    displayName: Maven Build
+
+  # Save cache
+  - script: rsync -a ~/.m2/repository/ $(mavenCacheFolder)/
+    condition: always()
+
+  # --- BASH: Federated ACR login + Build & Push ---
+  - script: |
+      set -e
+
+      # Install tools
+      apk add --no-cache curl jq  # or apt install -y curl jq
+
+      # Get ACR refresh token using federated OIDC
+      AZURE_TOKEN=$(curl -s -X POST \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        "https://login.microsoftonline.com/$AZURE_TENANT_ID/oauth2/v2.0/token" \
+        -d "client_id=$AZURE_CLIENT_ID" \
+        -d "grant_type=client_credentials" \
+        -d "scope=https%3A%2F%2Fmanagement.azure.com%2F.default" \
+        -d "response_type=token" \
+        -d "token=$AZURE_FEDERATED_TOKEN" | jq -r .access_token)
+
+      ACR_REFRESH_TOKEN=$(curl -s -H "Authorization: Bearer $AZURE_TOKEN" \
+        "https://management.azure.com/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_GROUP/providers/Microsoft.ContainerRegistry/registries/$acrName/listCredentials?api-version=2019-05-01" \
+        | jq -r '.passwords[0].value')
+
+      # Create Docker config
+      mkdir -p ~/.docker
+      echo "{\"auths\":{\"$acrName.azurecr.io\":{\"auth\":\"$(echo -n "00000000-0000-0000-0000-000000000000:$ACR_REFRESH_TOKEN" | base64 -w 0)\"}}}" > ~/.docker/config.json
+
+      # Build AND push in one command
+      buildctl-daemonless.sh build \
+        --frontend dockerfile.v0 \
+        --local context=. \
+        --local dockerfile=Dockerfile \
+        --output type=image,name=$acrName.azurecr.io/myapp:java11-$(Build.BuildId),push=true
+    displayName: 'Build & Push to ACR (Federated + Daemonless)'
+    env:
+      AZURE_CLIENT_ID: $(AZURE_CLIENT_ID)
+      AZURE_TENANT_ID: $(AZURE_TENANT_ID)
+      AZURE_FEDERATED_TOKEN: $(AZURE_FEDERATED_TOKEN)
+      AZURE_SUBSCRIPTION_ID: $(azureSubscriptionId)
+      AZURE_RESOURCE_GROUP: $(resourceGroup)
+      acrName: $(acrName)

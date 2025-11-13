@@ -1,0 +1,145 @@
+trigger:
+  - main
+
+variables:
+  acrName: myacr
+  imageName: myapp
+  mavenCacheFolder: $(Pipeline.Workspace)/.m2/repository
+  mavenCacheKey: 'maven | "$(Agent.OS)" | pom.xml'
+
+pool:
+  name: my-vmss-pool
+
+# -------------------------------------------------
+# Matrix for Java 11 / 17 / 21
+# -------------------------------------------------
+strategy:
+  matrix:
+    java11:
+      javaVersion: '11'
+      containerImage: myacr.azurecr.io/ci/java11-tools:latest
+    java17:
+      javaVersion: '17'
+      containerImage: myacr.azurecr.io/ci/java17-tools:latest
+    java21:
+      javaVersion: '21'
+      containerImage: myacr.azurecr.io/ci/java21-tools:latest
+
+jobs:
+  # =============================================
+  # 1. Authenticate & Export Docker Config
+  # =============================================
+  - job: acr_login
+    displayName: 'Login to ACR (Federated)'
+    steps:
+      - task: AzureCLI@2
+        name: acrLogin
+        inputs:
+          azureSubscription: 'my-federated-connection'  # OIDC federated
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            echo "Logging into ACR: $(acrName)"
+            az acr login --name $(acrName)
+
+            # Export Docker config for next job
+            mkdir -p $(Pipeline.Workspace)/docker
+            cp ~/.docker/config.json $(Pipeline.Workspace)/docker/config.json
+
+            echo "Docker config saved to artifact"
+        displayName: 'az acr login + Export config'
+
+      - publish: $(Pipeline.Workspace)/docker/config.json
+        artifact: docker-config
+        displayName: 'Publish Docker Auth'
+
+  # =============================================
+  # 2. Build & Push (in container)
+  # =============================================
+  - job: build_and_push
+    dependsOn: acr_login
+    condition: succeeded()
+    displayName: 'Java $(javaVersion) – Build & Push'
+    container:
+      image: $(containerImage)
+      endpoint: my-acr-connection
+    timeoutInMinutes: 120
+
+    steps:
+      - checkout: self
+        clean: true
+
+      # Download Docker auth from previous job
+      - download: current
+        artifact: docker-config
+        displayName: 'Download Docker Auth'
+
+      # Restore into container
+      - script: |
+          mkdir -p ~/.docker
+          cp $(Pipeline.Workspace)/docker-config/config.json ~/.docker/config.json
+          echo "Docker auth restored"
+        displayName: 'Restore Docker Auth'
+
+      # Maven cache
+      - task: Cache@2
+        inputs:
+          key: '$(mavenCacheKey)'
+          path: $(mavenCacheFolder)
+          cacheHitVar: MAVEN_CACHE_RESTORED
+
+      - script: |
+          mkdir -p ~/.m2
+          ln -s $(mavenCacheFolder) ~/.m2/repository
+        displayName: Link cache
+
+      # Maven settings.xml
+      - script: |
+          cat > ~/.m2/settings.xml <<'EOF'
+          <settings>
+            <servers>
+              <server>
+                <id>central-proxy</id>
+                <username>$(MAVEN_USERNAME)</username>
+                <password>$(MAVEN_PASSWORD)</password>
+              </server>
+            </servers>
+            <mirrors>
+              <mirror>
+                <id>central-proxy</id>
+                <mirrorOf>central</mirrorOf>
+                <url>$(MAVEN_REPO_URL)</url>
+              </mirror>
+            </mirrors>
+          </settings>
+          EOF
+        env:
+          MAVEN_USERNAME: $(MAVEN_USERNAME)
+          MAVEN_PASSWORD: $(MAVEN_PASSWORD)
+          MAVEN_REPO_URL: $(MAVEN_REPO_URL)
+
+      # Build
+      - script: |
+          mvn -B -s ~/.m2/settings.xml \
+              -Dmaven.repo.local=~/.m2/repository \
+              clean verify
+        displayName: Maven Build
+
+      # Save cache
+      - script: rsync -a ~/.m2/repository/ $(mavenCacheFolder)/
+        condition: always()
+
+      # Build & Push with BuildKit
+      - script: |
+          IMAGE_TAG="$acrName.azurecr.io/$imageName:java$(javaVersion)-$(Build.BuildId)"
+
+          buildctl-daemonless.sh build \
+            --frontend dockerfile.v0 \
+            --local context=. \
+            --local dockerfile=. \
+            --opt filename=Dockerfile \
+            --opt build-arg:JAVA_VERSION=$(javaVersion) \
+            --output type=image,name=$IMAGE_TAG,push=true
+
+          echo "Pushed: $IMAGE_TAG"
+        displayName: 'Build & Push (BuildKit)'

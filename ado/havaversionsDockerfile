@@ -1,0 +1,62 @@
+# Dockerfile – Java 21 CI Image with Maven, Gradle, Azure CLI, jq, BuildKit
+FROM mcr.microsoft.com/openjdk/jdk:21-azurelinux
+
+# Environment variables
+ENV MAVEN_VERSION=3.9.9 \
+    GRADLE_VERSION=8.10.2 \
+    BUILDKIT_VERSION=0.15.0 \
+    AZURE_CLI_VERSION=2.66.0 \
+    JAVA_HOME=/opt/java/openjdk \
+    PATH="/opt/maven/bin:/opt/gradle/bin:/opt/buildkit/bin:${PATH}"
+
+# Install base tools
+RUN dnf install -y \
+    curl \
+    git \
+    jq \
+    unzip \
+    tar \
+    gzip \
+    ca-certificates \
+    && dnf clean all
+
+# --- Install Maven ---
+RUN curl -fsSL https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz \
+    | tar -xz -C /opt \
+    && mv /opt/apache-maven-${MAVEN_VERSION} /opt/maven \
+    && ln -s /opt/maven/bin/mvn /usr/local/bin/mvn
+
+# --- Install Gradle ---
+RUN curl -fsSL https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip -o gradle.zip \
+    && unzip gradle.zip -d /opt \
+    && mv /opt/gradle-${GRADLE_VERSION} /opt/gradle \
+    && rm gradle.zip \
+    && ln -s /opt/gradle/bin/gradle /usr/local/bin/gradle
+
+# --- Install Azure CLI ---
+RUN curl -fsSL https://aka.ms/InstallAzureCLIDeb | bash
+
+# --- Install BuildKit (daemonless) ---
+RUN curl -fsSL https://github.com/moby/buildkit/releases/download/v${BUILDKIT_VERSION}/buildkit-v${BUILDKIT_VERSION}.linux-amd64.tar.gz \
+    | tar -xz -C /opt \
+    && mkdir -p /opt/buildkit/bin \
+    && mv /opt/bin/buildctl* /opt/buildkit/bin/ \
+    && chmod +x /opt/buildkit/bin/buildctl-daemonless.sh \
+    && ln -s /opt/buildkit/bin/buildctl-daemonless.sh /usr/local/bin/buildctl-daemonless.sh
+
+# --- Verify installations ---
+RUN java -version && \
+    mvn -version && \
+    gradle -version && \
+    az --version && \
+    jq --version && \
+    buildctl-daemonless.sh --version
+
+# Default working directory
+WORKDIR /workspace
+
+# Optional: non-root user (recommended for security)
+# RUN useradd -m -s /bin/bash devops && chown -R devops:devops /workspace
+# USER devops
+
+CMD ["/bin/bash"]
