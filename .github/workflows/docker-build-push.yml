@@ -39,9 +39,15 @@ jobs:
           if [[ -f "$dockerfile" ]]; then
             # Extract image name by removing 'Dockerfile' from the filename
             imagename=$(basename "$dockerfile" | sed 's/Dockerfile$//')
-            echo "Building multi-arch image: $imagename from $dockerfile"
+            # Set platforms based on image name for extensibility
+            if [[ "$imagename" == "dotnet" ]]; then
+              platforms="linux/amd64"
+            else
+              platforms="linux/amd64,linux/arm64,windows/amd64"
+            fi
+            echo "Building image: $imagename from $dockerfile with platforms: $platforms"
             docker buildx build \
-              --platform linux/amd64,linux/arm64,windows/amd64 \
+              --platform "$platforms" \
               --tag "ghcr.io/${{ github.repository }}/$imagename:$datetag" \
               --tag "ghcr.io/${{ github.repository }}/$imagename:latest" \
               --push \
