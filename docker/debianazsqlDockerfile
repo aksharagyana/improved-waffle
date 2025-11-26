@@ -40,6 +40,7 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && rm -rf age age.tar.gz
 
 # Install sqlcmd (Go-based)
+RUN echo "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2"
 RUN curl -L "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2" \
         -o /tmp/sqlcmd.tar.gz \
     && tar -xvf /tmp/sqlcmd.tar.gz -C /tmp \
