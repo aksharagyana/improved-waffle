@@ -1,0 +1,70 @@
+FROM python:3.14.0
+
+ARG SOPS_VERSION=v3.11.0
+ARG TERRASCAN_VERSION=latest
+ARG AGE_VERSION=v1.2.1
+ARG SQLCMD_VERSION=v1.9.0
+ARG TARGETARCH
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl wget uuid-dev git zip unzip gpg tar ca-certificates jq \
+    apt-transport-https openssh-client openssh-server iproute2 dnsutils  \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Microsoft ODBC Driver for SQL Server
+RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-prod.gpg \
+    && curl -sSL https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Azure CLI, Terraform env, Packer env, Pulumi, SOPS, and Terrascan
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
+    && git clone --depth=1 https://github.com/tfutils/tfenv.git /root/.tfenv \
+    && git clone --depth=1 https://github.com/iamhsa/pkenv.git /root/.pkenv \
+    && curl -fsSL https://get.pulumi.com | sh \
+    && curl -o /usr/local/bin/sops -L https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64 \
+    && chmod +x /usr/local/bin/sops \
+    && if [ "$TERRASCAN_VERSION" = "latest" ]; then \
+        TERRASCAN_URL=$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest | grep -o -E "https://.+?_Linux_x86_64.tar.gz"); \
+    else \
+        TERRASCAN_URL="https://github.com/tenable/terrascan/releases/download/${TERRASCAN_VERSION}/terrascan_${TERRASCAN_VERSION}_Linux_x86_64.tar.gz"; \
+    fi \
+    && curl -L "$TERRASCAN_URL" -o terrascan.tar.gz \
+    && tar -xf terrascan.tar.gz terrascan \
+    && install terrascan /usr/local/bin \
+    && rm terrascan.tar.gz terrascan \
+    && if [ "$AGE_VERSION" = "latest" ]; then \
+        AGE_URL=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | jq -r '.assets[] | select(.name | test("linux-amd64.tar.gz$")) | .browser_download_url'); \
+    else \
+        AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-amd64.tar.gz"; \
+    fi \
+    && curl -L "$AGE_URL" -o age.tar.gz \
+    && tar -xf age.tar.gz \
+    && install age/age /usr/local/bin \
+    && install age/age-keygen /usr/local/bin \
+    && rm -rf age age.tar.gz
+
+# Install sqlcmd (Go-based)
+RUN curl -L "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2" \
+        -o /tmp/sqlcmd.tar.gz \
+    && tar -xvf /tmp/sqlcmd.tar.gz -C /tmp \
+    && mv /tmp/sqlcmd /usr/local/bin/sqlcmd \
+    && chmod +x /usr/local/bin/sqlcmd \
+    && rm /tmp/sqlcmd.tar.gz
+
+
+# Set environment variables for PATH
+ENV PATH="/root/.tfenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
+
+# Verify installations
+RUN az --version | head -n 1 \
+    && tfenv --version \
+    && pkenv --version \
+    && pulumi version \
+    && sops --version \
+    && terrascan version \
+    && age --version \
+    && age-keygen --version \
+	&& sqlcmd --version
