@@ -1,4 +1,4 @@
-FROM debian:trixie-slim
+FROM python:3.14.0
 
 ARG SOPS_VERSION=v3.11.0
 ARG TERRASCAN_VERSION=latest
@@ -7,25 +7,15 @@ ARG AGE_VERSION=v1.2.1
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl wget uuid-dev git zip unzip gpg tar ca-certificates jq \
-    apt-transport-https openssh-client openssh-server iproute2 dnsutils gnupg  \
+    apt-transport-https openssh-client openssh-server iproute2 dnsutils  \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Microsoft ODBC Driver for SQL Server
-
-RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | \
-        gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg && \
-    echo "deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] \
-        https://packages.microsoft.com/debian/13/prod trixie main" > \
-        /etc/apt/sources.list.d/mssql-tools.list && \
-
-RUN apt-get update && \
-    ACCEPT_EULA=Y apt-get install -y --no-install-recommends \
-        mssql-tools18 \
-        unixodbc-dev && \
-    rm -rf /var/lib/apt/lists/*
-
-# Add sqlcmd to PATH
-ENV PATH="${PATH}:/opt/mssql-tools18/bin"
+RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-prod.gpg \
+    && curl -sSL https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Azure CLI, Terraform env, Packer env, Pulumi, SOPS, and Terrascan
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
@@ -55,7 +45,7 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && rm -rf age age.tar.gz
 
 # Set environment variables for PATH
-ENV PATH="/root/.tfenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
+ENV PATH="/root/.tfenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:/opt/mssql-tools18/bin:$PATH"
 
 # Verify installations
 RUN az --version | head -n 1 \
