@@ -5,6 +5,7 @@ ARG SOPS_VERSION=v3.11.0
 RUN apt-get update && apt-get install -y \
 		curl wget uuid-dev git zip unzip gpg tar ca-certificates jq \
         apt-transport-https openssh-client openssh-server iproute2 dnsutils telnet \
+		libicu-dev libssl-dev \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
@@ -29,5 +30,8 @@ RUN curl -L "$(curl -s https://api.github.com/repos/tenable/terrascan/releases/l
     && rm terrascan \
     && terrascan
 
-RUN dotnet tool install -g microsoft.sqlcmd \
-    && ln -s /root/.dotnet/tools/sqlcmd /usr/local/bin/sqlcmd
+# Install the new Go-based sqlcmd tool
+RUN dotnet tool install -g microsoft.sqlcmd
+
+# Add sqlcmd to global PATH
+ENV PATH="${PATH}:/root/.dotnet/tools"
