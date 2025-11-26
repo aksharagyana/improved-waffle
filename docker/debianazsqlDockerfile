@@ -1,4 +1,4 @@
-FROM python:3.14.0
+FROM debian:bookworm
 
 ARG SOPS_VERSION=v3.11.0
 ARG TERRASCAN_VERSION=latest
@@ -9,14 +9,7 @@ ARG TARGETARCH
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl wget uuid-dev git zip unzip gpg tar ca-certificates jq \
-    apt-transport-https openssh-client openssh-server iproute2 dnsutils  \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Microsoft ODBC Driver for SQL Server
-RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-prod.gpg \
-    && curl -sSL https://packages.microsoft.com/config/debian/12/prod.list > /etc/apt/sources.list.d/mssql-release.list \
-    && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \
+    apt-transport-https openssh-client openssh-server iproute2 dnsutils telnet  \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Azure CLI, Terraform env, Packer env, Pulumi, SOPS, and Terrascan
@@ -36,9 +29,9 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && install terrascan /usr/local/bin \
     && rm terrascan.tar.gz terrascan \
     && if [ "$AGE_VERSION" = "latest" ]; then \
-        AGE_URL=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | jq -r '.assets[] | select(.name | test("linux-amd64.tar.gz$")) | .browser_download_url'); \
+        AGE_URL=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | jq -r '.assets[] | select(.name | test("linux-${TARGETARCH}.tar.gz$")) | .browser_download_url'); \
     else \
-        AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-amd64.tar.gz"; \
+        AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-${TARGETARCH}.tar.gz"; \
     fi \
     && curl -L "$AGE_URL" -o age.tar.gz \
     && tar -xf age.tar.gz \
