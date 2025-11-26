@@ -8,7 +8,7 @@ ARG TARGETARCH
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    curl wget uuid-dev git zip unzip gpg tar ca-certificates jq \
+    curl wget uuid-dev git zip unzip gpg tar ca-certificates jq bzip2 \
     apt-transport-https openssh-client openssh-server iproute2 dnsutils telnet  \
     && rm -rf /var/lib/apt/lists/*
 
@@ -40,7 +40,6 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && rm -rf age age.tar.gz
 
 # Install sqlcmd (Go-based)
-RUN echo "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2"
 RUN curl -L "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2" \
         -o /tmp/sqlcmd.tar.gz \
     && tar -xvf /tmp/sqlcmd.tar.gz -C /tmp \
