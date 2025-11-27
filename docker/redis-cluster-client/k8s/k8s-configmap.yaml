@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-cluster-client-config
+  namespace: redis
+  labels:
+    app: redis-cluster-client
+data:
+  REDIS_HOSTS: "test-redis-cluster-0.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-1.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-2.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-3.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-4.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-5.test-redis-cluster-headless.redis.svc.cluster.local:6379"
