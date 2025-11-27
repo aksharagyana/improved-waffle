@@ -1,0 +1,115 @@
+# Docker Compose for Redis Cluster Client Testing
+version: '3.8'
+
+services:
+  redis-cluster-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: redis-cluster-client
+    environment:
+      # Redis Cluster connection details
+      REDIS_HOSTS: "test-redis-cluster-0.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-1.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-2.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-3.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-4.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-5.test-redis-cluster-headless.redis.svc.cluster.local:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+
+      # Optional: Node.js debugging
+      # NODE_ENV: development
+      # DEBUG: ioredis:*
+
+    # Mount source code for development (optional)
+    volumes:
+      - .:/app:ro
+      - /app/node_modules
+
+    # Networking
+    networks:
+      - redis-network
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('Health check')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  redis-network:
+    driver: bridge
+    name: redis-cluster-network
+
+# ================================
+# Usage Examples
+# ================================
+
+# 1. Build and run:
+# docker-compose up --build
+
+# 2. Run with custom environment:
+# REDIS_PASSWORD=mypassword docker-compose up
+
+# 3. Run in background:
+# docker-compose up -d
+
+# 4. View logs:
+# docker-compose logs -f redis-cluster-client
+
+# 5. Stop and cleanup:
+# docker-compose down
+
+# 6. Rebuild after code changes:
+# docker-compose up --build --force-recreate
+
+# ================================
+# Alternative Direct Docker Commands
+# ================================
+
+# Build image:
+# docker build -t redis-cluster-client .
+
+# Run with environment variables:
+# docker run --rm \
+#   -e REDIS_HOSTS="test-redis-cluster-0.test-redis-cluster-headless.redis.svc.cluster.local:6379,test-redis-cluster-1.test-redis-cluster-headless.redis.svc.cluster.local:6379" \
+#   -e REDIS_PASSWORD="your_password" \
+#   --name redis-cluster-client \
+#   redis-cluster-client
+
+# Run interactively:
+# docker run -it --rm \
+#   -e REDIS_HOSTS="localhost:6379" \
+#   -e REDIS_PASSWORD="your_password" \
+#   --name redis-cluster-client \
+#   redis-cluster-client
+
+# ================================
+# Kubernetes Deployment
+# ================================
+
+# The app can also be deployed to Kubernetes:
+#
+# kubectl create configmap redis-client-config \
+#   --from-literal=REDIS_HOSTS="test-redis-cluster-0.test-redis-cluster-headless.redis.svc.cluster.local:6379,..." \
+#   --from-literal=REDIS_PASSWORD="your_password"
+#
+# kubectl apply -f k8s-deployment.yaml
+

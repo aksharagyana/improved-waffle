@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-cluster-client
+  namespace: redis
+  labels:
+    app: redis-cluster-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-cluster-client
+  template:
+    metadata:
+      labels:
+        app: redis-cluster-client
+    spec:
+      securityContext:
+        runAsUser: 1001  # Matches Docker non-root user
+        runAsGroup: 1001
+        runAsNonRoot: true
+        fsGroup: 1001
+      containers:
+      - name: redis-cluster-client
+        image: redis-cluster-client:latest  # You'll need to build and push this image
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001  # Matches Docker user
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: REDIS_HOSTS
+          valueFrom:
+            configMapKeyRef:
+              name: redis-cluster-client-config
+              key: REDIS_HOSTS
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret  # Your existing secret name
+              key: redis-password  # The key containing the password
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        # Optional: Add readiness and liveness probes
+        readinessProbe:
+          exec:
+            command:
+            - node
+            - -e
+            - console.log('Ready')
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - node
+            - -e
+            - console.log('Alive')
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster-client
+  namespace: redis
+  labels:
+    app: redis-cluster-client
+spec:
+  selector:
+    app: redis-cluster-client
+  ports:
+  - name: http
+    port: 80
+    targetPort: 3000  # If your app had a web server
+  type: ClusterIP
+---
+# Optional: Create a Job instead of Deployment for one-time execution
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redis-cluster-test-job
+  namespace: redis
+  labels:
+    app: redis-cluster-client
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsUser: 1001  # Matches Docker non-root user
+        runAsGroup: 1001
+        runAsNonRoot: true
+        fsGroup: 1001
+      containers:
+      - name: redis-cluster-client
+        image: redis-cluster-client:latest
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001  # Matches Docker user
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: REDIS_HOSTS
+          valueFrom:
+            configMapKeyRef:
+              name: redis-cluster-client-config
+              key: REDIS_HOSTS
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secret
+              key: redis-password
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      restartPolicy: Never
+  backoffLimit: 1

@@ -1,0 +1,39 @@
+# ================================
+# Build Stage
+# ================================
+FROM node:18-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+
+# Copy package files from root/redis-cluster-client
+COPY redis-cluster-client/package.json redis-cluster-client/package-lock.json ./
+
+# Install ALL dependencies
+RUN npm ci
+
+# Copy source code
+COPY redis-cluster-client/app ./app
+
+# Remove dev dependencies
+RUN npm prune --production
+
+
+# ================================
+# Production Stage
+# ================================
+FROM node:18-slim AS production
+
+WORKDIR /app
+
+RUN useradd -u 1001 nodejs
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/app ./app
+
+USER nodejs
+
+ENTRYPOINT ["node", "app/app.js"]
