@@ -123,23 +123,29 @@ async function testBasicOperations() {
 
   try {
     // String operations
-    await cluster.set('test:key1', 'Hello Redis Cluster!');
-    const value1 = await cluster.get('test:key1');
+    await cluster.set('test:{basic}:key1', 'Hello Redis Cluster!');
+    const value1 = await cluster.get('test:{basic}:key1');
     console.log(`  ✓ SET/GET: "${value1}"`);
 
-    // Multiple keys
-    await cluster.mset('test:key2', 'value2', 'test:key3', 'value3');
-    const values = await cluster.mget('test:key2', 'test:key3');
+    // Multiple keys (MSET/MGET requires same hash slot)
+    await cluster.mset(
+      'test:{basic}:key2', 'value2',
+      'test:{basic}:key3', 'value3'
+    );
+    const values = await cluster.mget(
+      'test:{basic}:key2',
+      'test:{basic}:key3'
+    );
     console.log(`  ✓ MSET/MGET: [${values.join(', ')}]`);
 
     // Counter operations
-    await cluster.set('test:counter', '0');
-    const incr = await cluster.incr('test:counter');
+    await cluster.set('test:{basic}:counter', '0');
+    const incr = await cluster.incr('test:{basic}:counter');
     console.log(`  ✓ INCR: counter = ${incr}`);
 
     // Expiration
-    await cluster.setex('test:temp', 10, 'temporary value');
-    const temp = await cluster.get('test:temp');
+    await cluster.setex('test:{basic}:temp', 10, 'temporary value');
+    const temp = await cluster.get('test:{basic}:temp');
     console.log(`  ✓ SETEX: temporary value = "${temp}"`);
 
     console.log('  ✅ Basic operations completed\n');
@@ -149,6 +155,7 @@ async function testBasicOperations() {
     throw error;
   }
 }
+
 
 // Test hash slot distribution
 async function testHashSlotDistribution() {
