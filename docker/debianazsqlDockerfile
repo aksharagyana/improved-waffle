@@ -8,8 +8,9 @@ ARG TARGETARCH
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    curl wget uuid-dev git zip unzip gpg tar ca-certificates jq bzip2 \
-    apt-transport-https openssh-client openssh-server iproute2 dnsutils telnet  \
+    curl wget uuid-dev git zip unzip gpg tar ca-certificates jq bzip2 buildah skopeo runc \
+    apt-transport-https openssh-client openssh-server iproute2 dnsutils telnet uidmap  fuse-overlayfs \
+    && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Azure CLI, Terraform env, Packer env, Pulumi, SOPS, and Terrascan
