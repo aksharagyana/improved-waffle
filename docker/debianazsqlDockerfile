@@ -4,11 +4,13 @@ ARG SOPS_VERSION=v3.11.0
 ARG TERRASCAN_VERSION=latest
 ARG AGE_VERSION=v1.2.1
 ARG SQLCMD_VERSION=v1.9.0
+ARG TFDOCS_VERSION=v0.20.0
+# e.g amd64 or arm64 etc.
 ARG TARGETARCH
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    curl wget uuid-dev git zip unzip gpg tar ca-certificates jq bzip2 buildah skopeo runc \
+    curl wget uuid-dev git zip unzip gpg tar ca-certificates jq bzip2 buildah skopeo runc jq \
     apt-transport-https openssh-client openssh-server iproute2 dnsutils telnet uidmap  fuse-overlayfs \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -48,6 +50,16 @@ RUN curl -L "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_V
     && chmod +x /usr/local/bin/sqlcmd \
     && rm /tmp/sqlcmd.tar.gz
 
+# Install terraform-docs
+RUN apt install -y pipx \
+    && pipx install pre-commit \
+    && pipx ensurepath \
+    && curl -Lo ./terraform-docs.tar.gz https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-$(uname)-${TARGETARCH}.tar.gz \
+    && tar -xzf terraform-docs.tar.gz \
+    && chmod +x terraform-docs \
+    && mv terraform-docs /usr/local/bin/terraform-docs \
+    && rm -rf terraform-docs.tar.gz \
+    && curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
 # Set environment variables for PATH
 ENV PATH="/root/.tfenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
