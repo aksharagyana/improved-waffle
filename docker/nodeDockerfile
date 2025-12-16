@@ -1,0 +1,135 @@
+# ============================================================
+# Base Image (Multi-arch: amd64, arm64)
+# ============================================================
+FROM --platform=$TARGETPLATFORM node:22-bookworm
+
+# ============================================================
+# Build arguments
+# ============================================================
+ARG TARGETPLATFORM
+ARG TARGETARCH
+
+ARG SOPS_VERSION=v3.11.0
+ARG TERRASCAN_VERSION=latest
+ARG AGE_VERSION=v1.2.1
+ARG SQLCMD_VERSION=v1.9.0
+ARG TFDOCS_VERSION=v0.20.0
+
+# ============================================================
+# Environment
+# ============================================================
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH="/root/.tfenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
+
+# ============================================================
+# System Dependencies (single layer for cache efficiency)
+# ============================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl wget git zip unzip gpg tar jq ca-certificates bzip2 \
+    uuid-dev \
+    buildah skopeo runc uidmap fuse-overlayfs \
+    apt-transport-https \
+    openssh-client openssh-server \
+    iproute2 dnsutils telnet \
+    python3 python3-pip python3-venv \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# Node.js / Yarn (Corepack – deterministic & cached)
+# ============================================================
+RUN corepack enable \
+    && corepack prepare yarn@stable --activate
+
+# ============================================================
+# Azure CLI (official installer)
+# ============================================================
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+
+# ============================================================
+# Terraform, Packer, Pulumi environments
+# ============================================================
+RUN git clone --depth=1 https://github.com/tfutils/tfenv.git /root/.tfenv \
+    && git clone --depth=1 https://github.com/iamhsa/pkenv.git /root/.pkenv \
+    && curl -fsSL https://get.pulumi.com | sh
+
+# ============================================================
+# SOPS (multi-arch safe)
+# ============================================================
+RUN curl -L \
+    "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.${TARGETARCH}" \
+    -o /usr/local/bin/sops \
+    && chmod +x /usr/local/bin/sops
+
+# ============================================================
+# Terrascan
+# ============================================================
+RUN if [ "${TERRASCAN_VERSION}" = "latest" ]; then \
+        TERRASCAN_URL=$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest \
+        | jq -r '.assets[] | select(.name | test("Linux_x86_64.tar.gz$")) | .browser_download_url'); \
+    else \
+        TERRASCAN_URL="https://github.com/tenable/terrascan/releases/download/${TERRASCAN_VERSION}/terrascan_${TERRASCAN_VERSION}_Linux_x86_64.tar.gz"; \
+    fi \
+    && curl -L "$TERRASCAN_URL" -o terrascan.tar.gz \
+    && tar -xzf terrascan.tar.gz terrascan \
+    && install terrascan /usr/local/bin \
+    && rm -f terrascan.tar.gz terrascan
+
+# ============================================================
+# AGE (proper arch handling)
+# ============================================================
+RUN if [ "${AGE_VERSION}" = "latest" ]; then \
+        AGE_URL=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest \
+        | jq -r '.assets[] | select(.name | test("linux-'${TARGETARCH}'.tar.gz$")) | .browser_download_url'); \
+    else \
+        AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-${TARGETARCH}.tar.gz"; \
+    fi \
+    && curl -L "$AGE_URL" -o age.tar.gz \
+    && tar -xzf age.tar.gz \
+    && install age/age /usr/local/bin \
+    && install age/age-keygen /usr/local/bin \
+    && rm -rf age age.tar.gz
+
+# ============================================================
+# sqlcmd (Go-based, multi-arch)
+# ============================================================
+RUN curl -L \
+    "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2" \
+    -o /tmp/sqlcmd.tar.bz2 \
+    && tar -xjf /tmp/sqlcmd.tar.bz2 -C /tmp \
+    && mv /tmp/sqlcmd /usr/local/bin/sqlcmd \
+    && chmod +x /usr/local/bin/sqlcmd \
+    && rm -f /tmp/sqlcmd.tar.bz2
+
+# ============================================================
+# terraform-docs + tflint + pre-commit
+# ============================================================
+RUN pip3 install --no-cache-dir pipx \
+    && pipx install pre-commit \
+    && pipx ensurepath \
+    && curl -L \
+    "https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-$(uname)-${TARGETARCH}.tar.gz" \
+    -o terraform-docs.tar.gz \
+    && tar -xzf terraform-docs.tar.gz \
+    && chmod +x terraform-docs \
+    && mv terraform-docs /usr/local/bin/terraform-docs \
+    && rm terraform-docs.tar.gz \
+    && curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+# ============================================================
+# Verification (fails build if anything is broken)
+# ============================================================
+RUN node --version \
+    && yarn --version \
+    && python3 --version \
+    && az --version | head -n 1 \
+    && tfenv --version \
+    && pkenv --version \
+    && pulumi version \
+    && sops --version \
+    && terrascan version \
+    && age --version \
+    && age-keygen --version \
+    && sqlcmd --version \
+    && terraform-docs --version \
+    && tflint --version
