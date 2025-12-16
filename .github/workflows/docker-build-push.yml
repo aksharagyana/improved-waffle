@@ -44,7 +44,7 @@ jobs:
     - name: Build and push Docker images
       run: |
         # Get current date in YYMMDD format
-        datetag=$(date +%y%m%d)
+        datetag=$(date +%y%m%d-%H%M%S)
         for dockerfile in docker/*; do
           if [[ -f "$dockerfile" ]]; then
             # Extract image name by removing 'Dockerfile' from the filename
