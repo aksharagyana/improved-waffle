@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     openssh-client openssh-server \
     iproute2 dnsutils telnet \
-    python3 python3-pip python3-venv \
+    python3 python3-pip python3-venv pipx \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
@@ -101,11 +101,13 @@ RUN curl -L \
     && chmod +x /usr/local/bin/sqlcmd \
     && rm -f /tmp/sqlcmd.tar.bz2
 
+
+
+
 # ============================================================
 # terraform-docs + tflint + pre-commit
 # ============================================================
-RUN pip3 install --no-cache-dir pipx \
-    && pipx install pre-commit \
+RUN pipx install pre-commit \
     && pipx ensurepath \
     && curl -L \
     "https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-$(uname)-${TARGETARCH}.tar.gz" \
