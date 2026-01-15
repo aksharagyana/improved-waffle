@@ -5,6 +5,8 @@ ARG TERRASCAN_VERSION=latest
 ARG AGE_VERSION=v1.2.1
 ARG SQLCMD_VERSION=v1.9.0
 ARG TFDOCS_VERSION=v0.20.0
+ARG TERRAGRUNT_VERSION=latest
+
 # e.g amd64 or arm64 etc.
 ARG TARGETARCH
 
@@ -60,6 +62,17 @@ RUN apt install -y pipx \
     && mv terraform-docs /usr/local/bin/terraform-docs \
     && rm -rf terraform-docs.tar.gz \
     && curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+# Install Terragrunt (multi-arch, latest)
+RUN if [ "$TERRAGRUNT_VERSION" = "latest" ]; then \
+        TG_URL=$(curl -s https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest \
+          | jq -r ".assets[] | select(.name == \"terragrunt_linux_${TARGETARCH}\") | .browser_download_url"); \
+    else \
+        TG_URL="https://github.com/gruntwork-io/terragrunt/releases/download/${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH}"; \
+    fi; \
+    curl -L "$TG_URL" -o /usr/local/bin/terragrunt; \
+    chmod +x /usr/local/bin/terragrunt
+
 
 # Set environment variables for PATH
 ENV PATH="/root/.tfenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
