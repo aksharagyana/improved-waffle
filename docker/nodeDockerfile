@@ -139,15 +139,15 @@ RUN mkdir -p /etc/apt/keyrings \
 # ============================================================
 # Terragrunt
 # ============================================================
-
 RUN if [ "$TERRAGRUNT_VERSION" = "latest" ]; then \
         TG_URL=$(curl -s https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest \
           | jq -r ".assets[] | select(.name == \"terragrunt_linux_${TARGETARCH}\") | .browser_download_url"); \
+        if [ -z "$TG_URL" ]; then echo "ERROR: Could not find terragrunt_linux_${TARGETARCH} in latest release"; exit 1; fi; \
     else \
         TG_URL="https://github.com/gruntwork-io/terragrunt/releases/download/${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH}"; \
-    fi; \
-    curl -L "$TG_URL" -o /usr/local/bin/terragrunt; \
-    chmod +x /usr/local/bin/terragrunt
+    fi \
+    && curl -L "$TG_URL" -o /usr/local/bin/terragrunt \
+    && chmod +x /usr/local/bin/terragrunt
 
 
 # ============================================================
