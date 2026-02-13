@@ -1,92 +1,133 @@
-FROM debian:bookworm
+FROM debian:bookworm-slim AS base
 
 ARG SOPS_VERSION=v3.11.0
-ARG TERRASCAN_VERSION=latest
+ARG TERRASCAN_VERSION=v1.19.9  # Latest as of 2026-02-13; repo archived but assets available
 ARG AGE_VERSION=v1.3.1
 ARG SQLCMD_VERSION=v1.9.0
 ARG TFDOCS_VERSION=v0.21.0
 ARG TENV_VERSION=v4.9.3
 
-# e.g amd64 or arm64 etc.
+# e.g. amd64 or arm64
 ARG TARGETARCH
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl wget uuid-dev git zip unzip gpg tar ca-certificates jq bzip2 buildah skopeo runc jq  \
-    apt-transport-https openssh-client openssh-server iproute2 dnsutils telnet uidmap fuse-overlayfs \
-    && update-ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# Install minimal dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl git jq tar unzip gpg bzip2 \
+    openssh-client iproute2 dnsutils telnet \
+    apt-transport-https \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-# Install tenv (Manages Tofu, Terraform, and Terragrunt)
-RUN if [ "$TARGETARCH" = "amd64" ]; then ARCH="x86_64"; else ARCH="arm64"; fi && \
-    curl -L "https://github.com/tofuutils/tenv/releases/download/${TENV_VERSION}/tenv_${TENV_VERSION}_Linux_${ARCH}.tar.gz" -o tenv.tar.gz \
-    && tar -xf tenv.tar.gz tenv \
-    && mv tenv /usr/local/bin/ \
-    && rm tenv.tar.gz \
+# ────────────────────────────────────────────────────────────────────────────────
+# tenv (manages OpenTofu, Terraform, Terragrunt, ...)
+# ────────────────────────────────────────────────────────────────────────────────
+RUN case "${TARGETARCH}" in \
+      amd64) TENV_ARCH="amd64" ;; \
+      arm64) TENV_ARCH="arm64" ;; \
+      *) echo "Unsupported arch: ${TARGETARCH}" && exit 1 ;; \
+    esac \
+    && TENV_URL="https://github.com/tofuutils/tenv/releases/download/${TENV_VERSION}/tenv_${TENV_VERSION}_Linux_${TENV_ARCH}.tar.gz" \
+    && curl -fsSL "${TENV_URL}" -o tenv.tar.gz || (echo "Failed to download ${TENV_URL}" && exit 1) \
+    && tar -xzf tenv.tar.gz tenv \
+    && install -m 0755 tenv /usr/local/bin/tenv \
+    && rm -f tenv.tar.gz tenv \
     && tenv tofu install latest \
+    && tenv terraform install latest \
     && tenv terragrunt install latest \
     && tenv tofu use latest \
+    && tenv terraform use latest \
     && tenv terragrunt use latest
 
-# Install Azure CLI, Packer env, Pulumi, SOPS, and Terrascan
+# ────────────────────────────────────────────────────────────────────────────────
+# Azure CLI + Pulumi + pkenv + SOPS + age + terrascan
+# ────────────────────────────────────────────────────────────────────────────────
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && git clone --depth=1 https://github.com/iamhsa/pkenv.git /root/.pkenv \
     && curl -fsSL https://get.pulumi.com | sh \
-    && curl -o /usr/local/bin/sops -L https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64 \
+    # SOPS
+    && case "${TARGETARCH}" in \
+         amd64) SOPS_ARCH="amd64" ;; \
+         arm64) SOPS_ARCH="arm64" ;; \
+         *) echo "Unsupported arch: ${TARGETARCH}" && exit 1 ;; \
+       esac \
+    && SOPS_URL="https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.${SOPS_ARCH}" \
+    && curl -fsSL "${SOPS_URL}" -o /usr/local/bin/sops || (echo "Failed to download ${SOPS_URL}" && exit 1) \
     && chmod +x /usr/local/bin/sops \
-    && if [ "$TERRASCAN_VERSION" = "latest" ]; then \
-        TERRASCAN_URL=$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest | grep -o -E "https://.+?_Linux_x86_64.tar.gz"); \
-    else \
-        TERRASCAN_URL="https://github.com/tenable/terrascan/releases/download/${TERRASCAN_VERSION}/terrascan_${TERRASCAN_VERSION}_Linux_x86_64.tar.gz"; \
-    fi \
-    && curl -L "$TERRASCAN_URL" -o terrascan.tar.gz \
-    && tar -xf terrascan.tar.gz terrascan \
-    && install terrascan /usr/local/bin \
-    && rm terrascan.tar.gz terrascan \
-    && if [ "$AGE_VERSION" = "latest" ]; then \
-        AGE_URL=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | jq -r ".assets[] | select(.name | test(\"linux-${TARGETARCH}.tar.gz$\")) | .browser_download_url"); \
-    else \
-        AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-${TARGETARCH}.tar.gz"; \
-    fi \
-    && curl -L "$AGE_URL" -o age.tar.gz \
-    && tar -xf age.tar.gz \
-    && install age/age /usr/local/bin \
-    && install age/age-keygen /usr/local/bin \
+    # terrascan (archived repo, but assets ok; recommend migrating to checkov/trivy long-term)
+    && case "${TARGETARCH}" in \
+         amd64) TERRASCAN_ARCH="x86_64" ;; \
+         arm64) TERRASCAN_ARCH="arm64" ;; \
+         *) echo "Unsupported arch: ${TARGETARCH}" && exit 1 ;; \
+       esac \
+    && if [ "${TERRASCAN_VERSION}" = "latest" ]; then \
+         TERRASCAN_URL=$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest | \
+                          jq -r '.assets[] | select(.name | test("Linux_'"${TERRASCAN_ARCH}"'.tar.gz$")) | .browser_download_url'); \
+       else \
+         TERRASCAN_URL="https://github.com/tenable/terrascan/releases/download/${TERRASCAN_VERSION}/terrascan_${TERRASCAN_VERSION}_Linux_${TERRASCAN_ARCH}.tar.gz"; \
+       fi \
+    && if [ -z "${TERRASCAN_URL}" ]; then echo "No terrascan asset for ${TARGETARCH}" && exit 1; fi \
+    && curl -fsSL "${TERRASCAN_URL}" -o terrascan.tar.gz || (echo "Failed to download ${TERRASCAN_URL}" && exit 1) \
+    && tar -xzf terrascan.tar.gz terrascan \
+    && install -m 0755 terrascan /usr/local/bin/terrascan \
+    && rm -rf terrascan.tar.gz terrascan \
+    # age
+    && AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-${TARGETARCH}.tar.gz" \
+    && curl -fsSL "${AGE_URL}" -o age.tar.gz || (echo "Failed to download ${AGE_URL}" && exit 1) \
+    && tar -xzf age.tar.gz \
+    && install -m 0755 age/age /usr/local/bin/age \
+    && install -m 0755 age/age-keygen /usr/local/bin/age-keygen \
     && rm -rf age age.tar.gz
 
-# Install sqlcmd (Go-based)
-RUN curl -L "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2" \
-        -o /tmp/sqlcmd.tar.gz \
-    && tar -xvf /tmp/sqlcmd.tar.gz -C /tmp \
-    && mv /tmp/sqlcmd /usr/local/bin/sqlcmd \
+# ────────────────────────────────────────────────────────────────────────────────
+# go-sqlcmd
+# ────────────────────────────────────────────────────────────────────────────────
+RUN SQLCMD_URL="https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-${SQLCMD_VERSION}-linux-${TARGETARCH}.tar.bz2" \
+    && curl -fsSL "${SQLCMD_URL}" -o sqlcmd.tar.bz2 || (echo "Failed to download ${SQLCMD_URL}" && exit 1) \
+    && tar -xjf sqlcmd.tar.bz2 -C /usr/local/bin sqlcmd \
     && chmod +x /usr/local/bin/sqlcmd \
-    && rm /tmp/sqlcmd.tar.gz
+    && rm sqlcmd.tar.bz2
 
+# ────────────────────────────────────────────────────────────────────────────────
+# Multi-stage for pipx/pre-commit to avoid Python bloat in final image
+# ────────────────────────────────────────────────────────────────────────────────
+FROM base AS pipx-builder
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/pipx \
+    && /opt/pipx/bin/pip install --no-cache-dir pipx \
+    && /opt/pipx/bin/pipx install pre-commit
 
-# Install terraform-docs, pre-commit, and tflint
-RUN apt install -y pipx \
-    && pipx install pre-commit \
-    && pipx ensurepath \
-    && curl -Lo ./terraform-docs.tar.gz https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-$(uname)-${TARGETARCH}.tar.gz \
-    && tar -xzf terraform-docs.tar.gz \
-    && chmod +x terraform-docs \
-    && mv terraform-docs /usr/local/bin/terraform-docs \
-    && rm -rf terraform-docs.tar.gz \
+FROM base
+COPY --from=pipx-builder /opt/pipx /opt/pipx
+RUN ln -s /opt/pipx/bin/pre-commit /usr/local/bin/pre-commit
+
+# ────────────────────────────────────────────────────────────────────────────────
+# terraform-docs + tflint
+# ────────────────────────────────────────────────────────────────────────────────
+RUN TFDOCS_URL="https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-Linux-${TARGETARCH}.tar.gz" \
+    && curl -fsSL "${TFDOCS_URL}" -o tfdocs.tar.gz || (echo "Failed to download ${TFDOCS_URL}" && exit 1) \
+    && tar -xzf tfdocs.tar.gz terraform-docs \
+    && install -m 0755 terraform-docs /usr/local/bin/terraform-docs \
+    && rm -rf tfdocs.tar.gz terraform-docs LICENSE README.md \
+    # tflint
     && curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
-# Set environment variables for PATH
-# Removed .tfenv/bin as tenv now provides 'terraform' and 'tofu' in /usr/local/bin
-ENV PATH="/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
+# PATH updates
+ENV PATH="/root/.pkenv/bin:/root/.pulumi/bin:/opt/pipx/bin:$PATH"
 
-# Verify installations
-RUN az --version | head -n 1 \
-    && tenv --version \
-    && tofu --version \
-    && terragrunt --version \
-    && pkenv --version \
-    && pulumi version \
-    && sops --version \
-    && terrascan version \
-    && age --version \
-    && age-keygen --version \
-    && sqlcmd --version
+# Verification
+RUN set -eux && \
+    az --version | head -n1 && \
+    tenv --version && \
+    tofu --version && \
+    terraform --version && \
+    terragrunt --version && \
+    pkenv --version && \
+    pulumi version && \
+    sops --version && \
+    terrascan version && \
+    age --version && \
+    age-keygen --version && \
+    sqlcmd --version && \
+    terraform-docs --version && \
+    tflint --version && \
+    pre-commit --version
