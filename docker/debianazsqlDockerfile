@@ -5,7 +5,7 @@ ARG TERRASCAN_VERSION=latest
 ARG AGE_VERSION=v1.2.1
 ARG SQLCMD_VERSION=v1.9.0
 ARG TFDOCS_VERSION=v0.20.0
-ARG TERRAGRUNT_VERSION=latest
+ARG TENV_VERSION=v4.1.0
 
 # e.g amd64 or arm64 etc.
 ARG TARGETARCH
@@ -13,13 +13,22 @@ ARG TARGETARCH
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl wget uuid-dev git zip unzip gpg tar ca-certificates jq bzip2 buildah skopeo runc jq  \
-    apt-transport-https openssh-client openssh-server iproute2 dnsutils telnet uidmap  fuse-overlayfs \
+    apt-transport-https openssh-client openssh-server iproute2 dnsutils telnet uidmap fuse-overlayfs \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Azure CLI, Terraform env, Packer env, Pulumi, SOPS, and Terrascan
+# Install tenv (Manages Tofu, Terraform, and Terragrunt)
+RUN curl -L "https://github.com/tofuutils/tenv/releases/download/${TENV_VERSION}/tenv_${TENV_VERSION}_linux_${TARGETARCH}.tar.gz" -o tenv.tar.gz \
+    && tar -xf tenv.tar.gz tenv \
+    && mv tenv /usr/local/bin/ \
+    && rm tenv.tar.gz \
+    && tenv tofu install latest \
+    && tenv terragrunt install latest \
+    && tenv tofu use latest \
+    && tenv terragrunt use latest
+
+# Install Azure CLI, Packer env, Pulumi, SOPS, and Terrascan
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
-    && git clone --depth=1 https://github.com/tfutils/tfenv.git /root/.tfenv \
     && git clone --depth=1 https://github.com/iamhsa/pkenv.git /root/.pkenv \
     && curl -fsSL https://get.pulumi.com | sh \
     && curl -o /usr/local/bin/sops -L https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64 \
@@ -34,7 +43,7 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && install terrascan /usr/local/bin \
     && rm terrascan.tar.gz terrascan \
     && if [ "$AGE_VERSION" = "latest" ]; then \
-        AGE_URL=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | jq -r '.assets[] | select(.name | test("linux-${TARGETARCH}.tar.gz$")) | .browser_download_url'); \
+        AGE_URL=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest | jq -r ".assets[] | select(.name | test(\"linux-${TARGETARCH}.tar.gz$\")) | .browser_download_url"); \
     else \
         AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-${TARGETARCH}.tar.gz"; \
     fi \
@@ -52,7 +61,7 @@ RUN curl -L "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_V
     && chmod +x /usr/local/bin/sqlcmd \
     && rm /tmp/sqlcmd.tar.gz
 
-# Install terraform-docs
+# Install terraform-docs, pre-commit, and tflint
 RUN apt install -y pipx \
     && pipx install pre-commit \
     && pipx ensurepath \
@@ -63,27 +72,19 @@ RUN apt install -y pipx \
     && rm -rf terraform-docs.tar.gz \
     && curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
-# Install Terragrunt (multi-arch, latest)
-RUN if [ "$TERRAGRUNT_VERSION" = "latest" ]; then \
-        TG_URL=$(curl -s https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest \
-          | jq -r ".assets[] | select(.name == \"terragrunt_linux_${TARGETARCH}\") | .browser_download_url"); \
-    else \
-        TG_URL="https://github.com/gruntwork-io/terragrunt/releases/download/${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH}"; \
-    fi; \
-    curl -L "$TG_URL" -o /usr/local/bin/terragrunt; \
-    chmod +x /usr/local/bin/terragrunt
-
-
 # Set environment variables for PATH
-ENV PATH="/root/.tfenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
+# Removed .tfenv/bin as tenv now provides 'terraform' and 'tofu' in /usr/local/bin
+ENV PATH="/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
 
 # Verify installations
 RUN az --version | head -n 1 \
-    && tfenv --version \
+    && tenv --version \
+    && tofu --version \
+    && terragrunt --version \
     && pkenv --version \
     && pulumi version \
     && sops --version \
     && terrascan version \
     && age --version \
     && age-keygen --version \
-	&& sqlcmd --version
+    && sqlcmd --version
