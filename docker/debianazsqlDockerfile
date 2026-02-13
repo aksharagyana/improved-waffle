@@ -21,12 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # tenv (manages OpenTofu, Terraform, Terragrunt, ...)
 # ────────────────────────────────────────────────────────────────────────────────
 RUN case "${TARGETARCH}" in \
-      amd64) TENV_ARCH="amd64" ;; \
-      arm64) TENV_ARCH="arm64" ;; \
+      amd64) TENV_ARCH="x86_64" ;; \
+      arm64) TENV_ARCH="arm64"  ;; \
       *) echo "Unsupported arch: ${TARGETARCH}" && exit 1 ;; \
     esac \
     && TENV_URL="https://github.com/tofuutils/tenv/releases/download/${TENV_VERSION}/tenv_${TENV_VERSION}_Linux_${TENV_ARCH}.tar.gz" \
-    && curl -fsSL "${TENV_URL}" -o tenv.tar.gz || (echo "Failed to download ${TENV_URL}" && exit 1) \
+    && curl -fsSL "${TENV_URL}" -o tenv.tar.gz || (echo "Failed to download ${TENV_URL} - check if release exists and asset naming" && exit 1) \
     && tar -xzf tenv.tar.gz tenv \
     && install -m 0755 tenv /usr/local/bin/tenv \
     && rm -f tenv.tar.gz tenv \
