@@ -55,13 +55,13 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && rm -rf age age.tar.gz
 
 # Install sqlcmd (Go-based)
-RUN if [ "$TARGETARCH" = "amd64" ]; then SQL_ARCH="x64"; else SQL_ARCH="arm64"; fi && \
-    curl -L "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-${SQLCMD_VERSION}-linux-${SQL_ARCH}.tar.bz2" \
-    -o /tmp/sqlcmd.tar.bz2 \
-    && tar -xjf /tmp/sqlcmd.tar.bz2 -C /tmp \
+RUN curl -L "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2" \
+        -o /tmp/sqlcmd.tar.gz \
+    && tar -xvf /tmp/sqlcmd.tar.gz -C /tmp \
     && mv /tmp/sqlcmd /usr/local/bin/sqlcmd \
     && chmod +x /usr/local/bin/sqlcmd \
-    && rm /tmp/sqlcmd.tar.bz2
+    && rm /tmp/sqlcmd.tar.gz
+
 
 # Install terraform-docs, pre-commit, and tflint
 RUN apt install -y pipx \
