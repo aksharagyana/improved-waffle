@@ -70,15 +70,20 @@ RUN git clone --depth=1 https://github.com/tfutils/tfenv.git   /root/.tfenv \
     && git clone --depth=1 https://github.com/iamhsa/pkenv.git /root/.pkenv
 
 # ============================================================
-# Pulumi – always latest (or specific version)
+# Pulumi – always latest (or pinned version via ARG)
 # ============================================================
 RUN mkdir -p /root/.pulumi/bin \
     && if [ "${PULUMI_VERSION}" = "latest" ]; then \
          PULUMI_VERSION=$(curl -s https://api.github.com/repos/pulumi/pulumi/releases/latest | jq -r .tag_name); \
        fi \
-    && curl -fsSL "https://github.com/pulumi/pulumi/releases/download/${PULUMI_VERSION}/pulumi-${PULUMI_VERSION}-linux-${TARGETARCH}.tar.gz" \
-       | tar -xz -C /root/.pulumi/bin --strip-components=1 \
-    && rm -f pulumi-*.tar.gz
+    && PULUMI_ARCH="${TARGETARCH}" \
+    && if [ "${PULUMI_ARCH}" = "amd64" ]; then PULUMI_ARCH="x64"; fi \
+    && curl -fsSL \
+         "https://get.pulumi.com/releases/sdk/pulumi-${PULUMI_VERSION}-linux-${PULUMI_ARCH}.tar.gz" \
+       -o /tmp/pulumi.tar.gz \
+    && tar -xzf /tmp/pulumi.tar.gz -C /root/.pulumi/bin \
+    && rm -f /tmp/pulumi.tar.gz \
+    && chmod +x /root/.pulumi/bin/pulumi
 
 # ============================================================
 # SOPS – always latest (or pinned)
