@@ -1,8 +1,10 @@
 stages:
+  - build-images
   - copy-images
 
 variables:
   DOCKER_CLI_EXPERIMENTAL: enabled
+  CACHEBUST: "${CI_PIPELINE_ID}"
 
 # Docker-in-Docker service is needed for buildx
 services:
@@ -14,6 +16,35 @@ before_script:
   - echo "$TARGET_REGISTRY_PASSWORD" | docker login $TARGET_REGISTRY -u "$TARGET_REGISTRY_USERNAME" --password-stdin
   # Create and use a buildx builder
   - docker buildx create --use --name mybuilder || docker buildx use mybuilder
+
+build_images:
+  stage: build-images
+  image: docker:24
+  script:
+    - datetag=$(date +%y%m%d%H%M%S)
+    - cachebust="${CACHEBUST:-$(date +%s)}"
+    - |
+      for dockerfile in docker/*; do
+        if [ -f "$dockerfile" ]; then
+          imagename=$(basename "$dockerfile" | sed 's/Dockerfile$//')
+          if [ "$imagename" = "dotnet" ]; then
+            platforms="linux/amd64"
+          else
+            platforms="linux/amd64,linux/arm64"
+          fi
+          echo "Building image: $imagename from $dockerfile with platforms: $platforms"
+          docker buildx build \
+            --platform "$platforms" \
+            --tag "$TARGET_REGISTRY/$imagename:$datetag" \
+            --tag "$TARGET_REGISTRY/$imagename:latest" \
+            --build-arg CACHEBUST="$cachebust" \
+            --push \
+            -f "$dockerfile" \
+            .
+        fi
+      done
+  only:
+    - main
 
 copy_images:
   stage: copy-images
