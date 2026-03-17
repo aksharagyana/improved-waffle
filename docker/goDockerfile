@@ -8,7 +8,8 @@ FROM golang:latest
 # ============================================================
 ARG TARGETPLATFORM
 ARG TARGETARCH
-ARG CACHEBUST=2026-02-23 # Change this value (or pass --build-arg CACHEBUST=$(date +%s)) to force full rebuild
+ARG CACHEBUST=2026-02-23    # Change this value (or pass --build-arg CACHEBUST=$(date +%s)) to force full rebuild
+
 ARG SOPS_VERSION=latest
 ARG TERRASCAN_VERSION=latest
 ARG AGE_VERSION=latest
@@ -17,7 +18,7 @@ ARG TFDOCS_VERSION=latest
 ARG TERRAGRUNT_VERSION=latest
 ARG PULUMI_VERSION=latest
 ARG TERRATEST_VERSION=latest
-ARG OPENTOFU_VERSION=latest   # ← added
+ARG OPENTOFU_VERSION=latest
 
 # ============================================================
 # Environment
@@ -61,7 +62,7 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 # ============================================================
 # tfenv + pkenv (for managing multiple terraform/packer versions)
 # ============================================================
-RUN git clone --depth=1 https://github.com/tfutils/tfenv.git /root/.tfenv \
+RUN git clone --depth=1 https://github.com/tfutils/tfenv.git   /root/.tfenv \
     && git clone --depth=1 https://github.com/iamhsa/pkenv.git /root/.pkenv
 
 # ============================================================
@@ -82,13 +83,25 @@ RUN if [ "${SOPS_VERSION}" = "latest" ]; then \
 # ============================================================
 # Terrascan
 # ============================================================
-RUN if [ "${TERRASCAN_VERSION}" = "latest" ]; then \
-         TERRASCAN_URL=$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest \
-           | jq -r '.assets[] | select(.name | endswith("Linux_x86_64.tar.gz")) | .browser_download_url'); \
-       else \
-         TERRASCAN_URL="https://github.com/tenable/terrascan/releases/download/${TERRASCAN_VERSION}/terrascan_${TERRASCAN_VERSION}_Linux_x86_64.tar.gz"; \
-       fi \
-    && curl -fsSL "${TERRASCAN_URL}" -o /tmp/terrascan.tar.gz \
+RUN set -eux; \
+    arch="${TARGETARCH}"; \
+    # Map Docker arch names to Terrascan arch names
+    if [ "${arch}" = "amd64" ]; then arch="x86_64"; fi; \
+    if [ "${TERRASCAN_VERSION}" = "latest" ]; then \
+      # Get latest tag (e.g. v1.19.9) and strip leading 'v' for file name
+      TERRASCAN_TAG="$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest | jq -r .tag_name)"; \
+      TERRASCAN_FILE_VERSION="${TERRASCAN_TAG#v}"; \
+    else \
+      # Support both 'v1.19.9' and '1.19.9' as input
+      TERRASCAN_TAG="${TERRASCAN_VERSION}"; \
+      case "${TERRASCAN_TAG}" in \
+        v*) TERRASCAN_FILE_VERSION="${TERRASCAN_TAG#v}" ;; \
+        *)  TERRASCAN_FILE_VERSION="${TERRASCAN_TAG}" ;; \
+      esac; \
+    fi; \
+    TERRASCAN_URL="https://github.com/tenable/terrascan/releases/download/${TERRASCAN_TAG}/terrascan_${TERRASCAN_FILE_VERSION}_Linux_${arch}.tar.gz"; \
+    echo "Downloading Terrascan from ${TERRASCAN_URL}"; \
+    curl -fsSL "${TERRASCAN_URL}" -o /tmp/terrascan.tar.gz \
     && tar -xzf /tmp/terrascan.tar.gz -C /tmp terrascan \
     && install /tmp/terrascan /usr/local/bin/terrascan \
     && rm -rf /tmp/terrascan*
@@ -104,18 +117,27 @@ RUN if [ "${AGE_VERSION}" = "latest" ]; then \
        fi \
     && curl -fsSL "${AGE_URL}" -o /tmp/age.tar.gz \
     && tar -xzf /tmp/age.tar.gz -C /tmp \
-    && install /tmp/age/age /usr/local/bin/age \
+    && install /tmp/age/age        /usr/local/bin/age \
     && install /tmp/age/age-keygen /usr/local/bin/age-keygen \
     && rm -rf /tmp/age*
 
 # ============================================================
 # Microsoft sqlcmd
 # ============================================================
-RUN if [ "${SQLCMD_VERSION}" = "latest" ]; then \
-         SQLCMD_VERSION=$(curl -s https://api.github.com/repos/microsoft/go-sqlcmd/releases/latest | jq -r .tag_name); \
-       fi \
-    && curl -fsSL "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2" \
-       -o /tmp/sqlcmd.tar.bz2 \
+RUN set -eux; \
+    arch="${TARGETARCH}"; \
+    # Determine tag to use (GitHub tag is like v1.9.0)
+    if [ "${SQLCMD_VERSION}" = "latest" ]; then \
+      SQLCMD_TAG="$(curl -s https://api.github.com/repos/microsoft/go-sqlcmd/releases/latest | jq -r .tag_name)"; \
+    else \
+      case "${SQLCMD_VERSION}" in \
+        v*) SQLCMD_TAG="${SQLCMD_VERSION}" ;; \
+        *)  SQLCMD_TAG="v${SQLCMD_VERSION}" ;; \
+      esac; \
+    fi; \
+    SQLCMD_URL="https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_TAG}/sqlcmd-linux-${arch}.tar.bz2"; \
+    echo "Downloading sqlcmd from ${SQLCMD_URL}"; \
+    curl -fsSL "${SQLCMD_URL}" -o /tmp/sqlcmd.tar.bz2 \
     && tar -xjf /tmp/sqlcmd.tar.bz2 -C /tmp \
     && install /tmp/sqlcmd /usr/local/bin/sqlcmd \
     && rm -f /tmp/sqlcmd*
@@ -134,6 +156,28 @@ RUN pipx install pre-commit \
     && install /tmp/terraform-docs /usr/local/bin/terraform-docs \
     && rm -rf /tmp/terraform-docs* \
     && curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+# ============================================================
+# OpenTofu – always latest (or pinned)
+# ============================================================
+RUN set -eux; \
+    arch="${TARGETARCH}"; \
+    # Determine tag and file version (tag like v1.11.5, file like tofu_1.11.5_linux_amd64.zip)
+    if [ "${OPENTOFU_VERSION}" = "latest" ]; then \
+      OPENTOFU_TAG="$(curl -s https://api.github.com/repos/opentofu/opentofu/releases/latest | jq -r .tag_name)"; \
+      OPENTOFU_FILE_VERSION="${OPENTOFU_TAG#v}"; \
+    else \
+      case "${OPENTOFU_VERSION}" in \
+        v*) OPENTOFU_TAG="${OPENTOFU_VERSION}"; OPENTOFU_FILE_VERSION="${OPENTOFU_VERSION#v}";; \
+        *)  OPENTOFU_TAG="v${OPENTOFU_VERSION}"; OPENTOFU_FILE_VERSION="${OPENTOFU_VERSION}";; \
+      esac; \
+    fi; \
+    OPEN_TOFU_ASSET_URL="https://github.com/opentofu/opentofu/releases/download/${OPENTOFU_TAG}/tofu_${OPENTOFU_FILE_VERSION}_linux_${arch}.zip"; \
+    echo "Downloading OpenTofu from ${OPEN_TOFU_ASSET_URL}"; \
+    curl -fsSL "${OPEN_TOFU_ASSET_URL}" -o /tmp/tofu.zip; \
+    unzip /tmp/tofu.zip -d /tmp/tofu; \
+    install /tmp/tofu/tofu /usr/local/bin/tofu; \
+    rm -rf /tmp/tofu /tmp/tofu.zip
 
 # ============================================================
 # Docker CLI + Compose plugin (official repo)
@@ -163,20 +207,6 @@ RUN if [ "${TERRAGRUNT_VERSION}" = "latest" ]; then \
     && chmod +x /usr/local/bin/terragrunt
 
 # ============================================================
-# OpenTofu – always latest binary (executable named tofu)
-# ============================================================
-RUN if [ "${OPENTOFU_VERSION}" = "latest" ]; then \
-         OPENTOFU_VERSION=$(curl -s https://api.github.com/repos/opentofu/opentofu/releases/latest | jq -r .tag_name | sed 's/^v//'); \
-       fi \
-    && OPENTOFU_FILE="tofu_${OPENTOFU_VERSION}_linux_${TARGETARCH}.zip" \
-    && curl -fsSL "https://github.com/opentofu/opentofu/releases/download/v${OPENTOFU_VERSION}/${OPENTOFU_FILE}" \
-       -o /tmp/opentofu.zip \
-    && unzip -j /tmp/opentofu.zip tofu -d /usr/local/bin/ \
-    && chmod +x /usr/local/bin/tofu \
-    && ln -s /usr/local/bin/tofu /usr/local/bin/opentofu 2>/dev/null || true \
-    && rm -f /tmp/opentofu.zip
-
-# ============================================================
 # Terratest + parser (latest or pinned tag)
 # ============================================================
 RUN if [ "${TERRATEST_VERSION}" = "latest" ]; then \
@@ -200,6 +230,7 @@ RUN set -eux \
     && tfenv --version \
     && pkenv --version \
     && pulumi version \
+    && tofu version \
     && sops --version \
     && terrascan version \
     && age --version \
@@ -207,5 +238,4 @@ RUN set -eux \
     && sqlcmd --version \
     && terraform-docs --version \
     && tflint --version \
-    && terragrunt --version \
-    && tofu version   # ← added
+    && terragrunt --version
