@@ -1,7 +1,7 @@
 # ================================
 # Build Stage
 # ================================
-FROM node:24-slim AS builder
+FROM node:24-bookworm-slim AS builder
 
 WORKDIR /app
 
