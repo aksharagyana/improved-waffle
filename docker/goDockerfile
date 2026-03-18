@@ -24,7 +24,7 @@ ARG OPENTOFU_VERSION=latest
 # Environment
 # ============================================================
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PATH="/root/.tfenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
+ENV PATH="/root/.tenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
 
 # ============================================================
 # Force cache invalidation for layers below (useful during dev)
@@ -60,10 +60,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
 # ============================================================
-# tfenv + pkenv (for managing multiple terraform/packer versions)
+# pkenv (for managing multiple terraform/packer versions)
 # ============================================================
-RUN git clone --depth=1 https://github.com/tfutils/tfenv.git   /root/.tfenv \
-    && git clone --depth=1 https://github.com/iamhsa/pkenv.git /root/.pkenv
+RUN git clone --depth=1 https://github.com/iamhsa/pkenv.git /root/.pkenv
 
 # ============================================================
 # Pulumi – always latest
@@ -158,53 +157,26 @@ RUN pipx install pre-commit \
     && curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
 
 # ============================================================
-# OpenTofu – always latest (or pinned)
+# tenv + OpenTofu – managed via tenv (latest-stable by default)
 # ============================================================
 RUN set -eux; \
     arch="${TARGETARCH}"; \
-    # Determine tag and file version (tag like v1.11.5, file like tofu_1.11.5_linux_amd64.zip)
-    if [ "${OPENTOFU_VERSION}" = "latest" ]; then \
-      OPENTOFU_TAG="$(curl -s https://api.github.com/repos/opentofu/opentofu/releases/latest | jq -r .tag_name)"; \
-      OPENTOFU_FILE_VERSION="${OPENTOFU_TAG#v}"; \
-    else \
-      case "${OPENTOFU_VERSION}" in \
-        v*) OPENTOFU_TAG="${OPENTOFU_VERSION}"; OPENTOFU_FILE_VERSION="${OPENTOFU_VERSION#v}";; \
-        *)  OPENTOFU_TAG="v${OPENTOFU_VERSION}"; OPENTOFU_FILE_VERSION="${OPENTOFU_VERSION}";; \
-      esac; \
-    fi; \
-    OPEN_TOFU_ASSET_URL="https://github.com/opentofu/opentofu/releases/download/${OPENTOFU_TAG}/tofu_${OPENTOFU_FILE_VERSION}_linux_${arch}.zip"; \
-    echo "Downloading OpenTofu from ${OPEN_TOFU_ASSET_URL}"; \
-    curl -fsSL "${OPEN_TOFU_ASSET_URL}" -o /tmp/tofu.zip; \
-    unzip /tmp/tofu.zip -d /tmp/tofu; \
-    install /tmp/tofu/tofu /usr/local/bin/tofu; \
-    rm -rf /tmp/tofu /tmp/tofu.zip
-
-# ============================================================
-# Docker CLI + Compose plugin (official repo)
-# ============================================================
-RUN install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
-    && chmod a+r /etc/apt/keyrings/docker.asc \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-       tee /etc/apt/sources.list.d/docker.list > /dev/null \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-         docker-ce-cli \
-         docker-compose-plugin \
-    && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Terragrunt – always latest binary
-# ============================================================
-RUN if [ "${TERRAGRUNT_VERSION}" = "latest" ]; then \
-         TG_URL=$(curl -s https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest \
-           | jq -r --arg arch "${TARGETARCH}" '.assets[] | select(.name == "terragrunt_linux_\($arch)") | .browser_download_url'); \
-         [ -n "${TG_URL}" ] || { echo "ERROR: No terragrunt_linux_${TARGETARCH} found in latest release"; exit 1; }; \
-       else \
-         TG_URL="https://github.com/gruntwork-io/terragrunt/releases/download/${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH}"; \
-       fi \
-    && curl -fsSL "${TG_URL}" -o /usr/local/bin/terragrunt \
-    && chmod +x /usr/local/bin/terragrunt
+    case "${arch}" in \
+      amd64|arm64) ;; \
+      *) echo "ERROR: Unsupported architecture for tenv: ${arch}"; exit 1;; \
+    esac; \
+    # Install tenv from GitHub releases (.deb package for Debian-based images), selecting correct asset via API
+    TENV_DEB_URL="$(curl -s https://api.github.com/repos/tofuutils/tenv/releases/latest \
+      | jq -r --arg arch "${arch}" '.assets[] | select(.name | endswith("_\($arch).deb")) | .browser_download_url')"; \
+    [ -n "${TENV_DEB_URL}" ] || { echo "ERROR: No tenv .deb asset found for arch ${arch}"; exit 1; }; \
+    echo "Downloading tenv from ${TENV_DEB_URL}"; \
+    curl -fsSL "${TENV_DEB_URL}" -o /tmp/tenv.deb; \
+    dpkg -i /tmp/tenv.deb; \
+    rm -f /tmp/tenv.deb; \
+    tenv version; \
+    # Install and set default OpenTofu version via tenv
+    tenv tofu install latest-stable; \
+    tenv tofu use latest-stable 
 
 # ============================================================
 # Terratest + parser (latest or pinned tag)
@@ -227,15 +199,13 @@ RUN set -eux \
     && terratest_log_parser --help >/dev/null \
     && python3 --version \
     && az --version | head -n1 \
-    && tfenv --version \
     && pkenv --version \
     && pulumi version \
-    && tofu version \
+    && tenv version \
     && sops --version \
     && terrascan version \
     && age --version \
     && age-keygen --version \
     && sqlcmd --version \
     && terraform-docs --version \
-    && tflint --version \
-    && terragrunt --version
+    && tflint --version 
