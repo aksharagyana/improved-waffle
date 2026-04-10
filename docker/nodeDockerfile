@@ -2,7 +2,7 @@
 # Base Image (Multi-arch: amd64, arm64)
 # Tooling aligned with goDockerfile + Node (Corepack, Docker CLI)
 # ============================================================
-FROM node:24-bookworm-slim
+FROM node:current-trixie
 
 # ============================================================
 # Build arguments

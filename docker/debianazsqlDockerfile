@@ -1,8 +1,8 @@
 # ============================================================
-# Debian bookworm-slim (multi-arch: amd64, arm64)
+# Debian trixie (multi-arch: amd64, arm64)
 # Tooling aligned with goDockerfile (no Go / Terratest)
 # ============================================================
-FROM debian:bookworm-slim
+FROM debian:trixie
 
 # ============================================================
 # Build arguments

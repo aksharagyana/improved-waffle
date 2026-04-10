@@ -1,5 +1,5 @@
 # node:24-bookworm-slim + shared tooling (Docker CLI already covered by install script)
-FROM node:24-bookworm-slim
+FROM node:current-trixie
 
 ARG TARGETPLATFORM
 ARG TARGETARCH

@@ -2,7 +2,7 @@
 # Python on Debian bookworm (multi-arch: amd64, arm64)
 # Tooling aligned with goDockerfile (no Go / Terratest)
 # ============================================================
-FROM python:3.13-slim-bookworm
+FROM python:3.14-trixie
 
 # ============================================================
 # Build arguments

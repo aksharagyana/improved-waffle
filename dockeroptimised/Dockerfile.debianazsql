@@ -1,5 +1,5 @@
-# Debian bookworm-slim + shared install script (see scripts/install-common-tooling.sh)
-FROM debian:bookworm-slim
+# Debian trixie + shared install script (see scripts/install-common-tooling.sh)
+FROM debian:trixie
 
 ARG TARGETPLATFORM
 ARG TARGETARCH

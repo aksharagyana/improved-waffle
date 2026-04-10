@@ -1,5 +1,5 @@
-# python:3.13-slim-bookworm + shared tooling
-FROM python:3.13-slim-bookworm
+# python:3.14-trixie + shared tooling
+FROM python:3.14-trixie
 
 ARG TARGETPLATFORM
 ARG TARGETARCH
