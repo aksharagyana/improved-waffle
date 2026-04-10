@@ -1,5 +1,6 @@
 # ============================================================
 # Base Image (Multi-arch: amd64, arm64)
+# Tooling aligned with goDockerfile + Node (Corepack, Docker CLI)
 # ============================================================
 FROM node:24-bookworm-slim
 
@@ -8,7 +9,7 @@ FROM node:24-bookworm-slim
 # ============================================================
 ARG TARGETPLATFORM
 ARG TARGETARCH
-ARG CACHEBUST=2026-02-23    # Change this value (or pass --build-arg CACHEBUST=$(date +%s)) to force full rebuild
+ARG CACHEBUST=2026-02-23
 
 ARG SOPS_VERSION=latest
 ARG TERRASCAN_VERSION=latest
@@ -17,16 +18,19 @@ ARG SQLCMD_VERSION=latest
 ARG TFDOCS_VERSION=latest
 ARG TERRAGRUNT_VERSION=latest
 ARG PULUMI_VERSION=latest
+ARG OPENTOFU_VERSION=latest
 
 # ============================================================
 # Environment
 # ============================================================
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PATH="/root/.tfenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
+ENV PATH="/root/.tenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
+ENV SOPS_VERSION=${SOPS_VERSION}
+ENV TERRASCAN_VERSION=${TERRASCAN_VERSION}
+ENV AGE_VERSION=${AGE_VERSION}
+ENV SQLCMD_VERSION=${SQLCMD_VERSION}
+ENV TFDOCS_VERSION=${TFDOCS_VERSION}
 
-# ============================================================
-# Force cache invalidation for layers below (useful during dev)
-# ============================================================
 RUN echo "Cache bust timestamp: ${CACHEBUST}" > /dev/null
 
 # ============================================================
@@ -53,133 +57,42 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ============================================================
-# Node.js / Yarn via Corepack + force latest npm
+# Node.js / Yarn via Corepack + latest npm
 # ============================================================
 RUN corepack enable \
     && corepack prepare yarn@stable --activate \
     && npm install -g npm@latest
 
 # ============================================================
-# Azure CLI (official script – usually gets latest)
+# Azure CLI
 # ============================================================
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
 # ============================================================
-# tfenv + pkenv (for managing multiple terraform/packer versions)
+# Docker CLI + Compose, AzCopy v10, ACR CLI
 # ============================================================
-RUN git clone --depth=1 https://github.com/tfutils/tfenv.git   /root/.tfenv \
-    && git clone --depth=1 https://github.com/iamhsa/pkenv.git /root/.pkenv
+COPY docker/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
+COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooling.sh
+RUN chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh \
+    && /tmp/install-docker-azcopy-acr.sh \
+    && /tmp/install-common-tooling.sh \
+    && rm -f /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh
 
 # ============================================================
-# Pulumi – always latest
-# ============================================================
-RUN curl -fsSL https://get.pulumi.com | sh
-
-# ============================================================
-# SOPS – always latest (or pinned)
-# ============================================================
-RUN if [ "${SOPS_VERSION}" = "latest" ]; then \
-         SOPS_VERSION=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | jq -r .tag_name); \
-       fi \
-    && curl -fsSL "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.${TARGETARCH}" \
-       -o /usr/local/bin/sops \
-    && chmod +x /usr/local/bin/sops
-
-# ============================================================
-# Terrascan
-# ============================================================
-RUN if [ "${TERRASCAN_VERSION}" = "latest" ]; then \
-         TERRASCAN_URL=$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest \
-           | jq -r '.assets[] | select(.name | endswith("Linux_x86_64.tar.gz")) | .browser_download_url'); \
-       else \
-         TERRASCAN_URL="https://github.com/tenable/terrascan/releases/download/${TERRASCAN_VERSION}/terrascan_${TERRASCAN_VERSION}_Linux_x86_64.tar.gz"; \
-       fi \
-    && curl -fsSL "${TERRASCAN_URL}" -o /tmp/terrascan.tar.gz \
-    && tar -xzf /tmp/terrascan.tar.gz -C /tmp terrascan \
-    && install /tmp/terrascan /usr/local/bin/terrascan \
-    && rm -rf /tmp/terrascan*
-
-# ============================================================
-# FiloSottile/age
-# ============================================================
-RUN if [ "${AGE_VERSION}" = "latest" ]; then \
-         AGE_URL=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest \
-           | jq -r --arg arch "${TARGETARCH}" '.assets[] | select(.name | test("linux-\($arch)\\.tar\\.gz$")) | .browser_download_url'); \
-       else \
-         AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-${TARGETARCH}.tar.gz"; \
-       fi \
-    && curl -fsSL "${AGE_URL}" -o /tmp/age.tar.gz \
-    && tar -xzf /tmp/age.tar.gz -C /tmp \
-    && install /tmp/age/age       /usr/local/bin/age \
-    && install /tmp/age/age-keygen /usr/local/bin/age-keygen \
-    && rm -rf /tmp/age*
-
-# ============================================================
-# Microsoft sqlcmd
-# ============================================================
-RUN if [ "${SQLCMD_VERSION}" = "latest" ]; then \
-         SQLCMD_VERSION=$(curl -s https://api.github.com/repos/microsoft/go-sqlcmd/releases/latest | jq -r .tag_name); \
-       fi \
-    && curl -fsSL "https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_VERSION}/sqlcmd-linux-${TARGETARCH}.tar.bz2" \
-       -o /tmp/sqlcmd.tar.bz2 \
-    && tar -xjf /tmp/sqlcmd.tar.bz2 -C /tmp \
-    && install /tmp/sqlcmd /usr/local/bin/sqlcmd \
-    && rm -f /tmp/sqlcmd*
-
-# ============================================================
-# terraform-docs + tflint + pre-commit
-# ============================================================
-RUN pipx install pre-commit \
-    && pipx ensurepath \
-    && if [ "${TFDOCS_VERSION}" = "latest" ]; then \
-         TFDOCS_VERSION=$(curl -s https://api.github.com/repos/terraform-docs/terraform-docs/releases/latest | jq -r .tag_name); \
-       fi \
-    && curl -fsSL "https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-$(uname -s | tr '[:upper:]' '[:lower:]')-${TARGETARCH}.tar.gz" \
-       -o /tmp/terraform-docs.tar.gz \
-    && tar -xzf /tmp/terraform-docs.tar.gz -C /tmp \
-    && install /tmp/terraform-docs /usr/local/bin/terraform-docs \
-    && rm -rf /tmp/terraform-docs* \
-    && curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
-
-# ============================================================
-# Docker CLI + Compose plugin (official repo)
-# ============================================================
-RUN install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
-    && chmod a+r /etc/apt/keyrings/docker.asc \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-       tee /etc/apt/sources.list.d/docker.list > /dev/null \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-         docker-ce-cli \
-         docker-compose-plugin \
-    && rm -rf /var/lib/apt/lists/*
-
-# ============================================================
-# Terragrunt – always latest binary
-# ============================================================
-RUN if [ "${TERRAGRUNT_VERSION}" = "latest" ]; then \
-         TG_URL=$(curl -s https://api.github.com/repos/gruntwork-io/terragrunt/releases/latest \
-           | jq -r --arg arch "${TARGETARCH}" '.assets[] | select(.name == "terragrunt_linux_\($arch)") | .browser_download_url'); \
-         [ -n "${TG_URL}" ] || { echo "ERROR: No terragrunt_linux_${TARGETARCH} found in latest release"; exit 1; }; \
-       else \
-         TG_URL="https://github.com/gruntwork-io/terragrunt/releases/download/${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH}"; \
-       fi \
-    && curl -fsSL "${TG_URL}" -o /usr/local/bin/terragrunt \
-    && chmod +x /usr/local/bin/terragrunt
-
-# ============================================================
-# Basic version smoke test (fails build if broken)
+# Smoke test
 # ============================================================
 RUN set -eux \
     && node --version \
     && yarn --version \
     && npm --version \
     && python3 --version \
+    && docker --version \
+    && azcopy --version \
+    && acr-cli version \
     && az --version | head -n1 \
-    && tfenv --version \
     && pkenv --version \
     && pulumi version \
+    && tenv version \
     && sops --version \
     && terrascan version \
     && age --version \
@@ -187,4 +100,4 @@ RUN set -eux \
     && sqlcmd --version \
     && terraform-docs --version \
     && tflint --version \
-    && terragrunt --version
+    && tofu --version

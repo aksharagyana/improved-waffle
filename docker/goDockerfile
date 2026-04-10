@@ -25,6 +25,12 @@ ARG OPENTOFU_VERSION=latest
 # ============================================================
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/root/.tenv/bin:/root/.pkenv/bin:/root/.pulumi/bin:$PATH"
+ENV SOPS_VERSION=${SOPS_VERSION}
+ENV TERRASCAN_VERSION=${TERRASCAN_VERSION}
+ENV AGE_VERSION=${AGE_VERSION}
+ENV SQLCMD_VERSION=${SQLCMD_VERSION}
+ENV TFDOCS_VERSION=${TFDOCS_VERSION}
+ENV TERRATEST_VERSION=${TERRATEST_VERSION}
 
 # ============================================================
 # Force cache invalidation for layers below (useful during dev)
@@ -60,136 +66,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
 # ============================================================
-# pkenv (for managing multiple terraform/packer versions)
+# Docker CLI + Compose, AzCopy v10, ACR CLI
 # ============================================================
-RUN git clone --depth=1 https://github.com/iamhsa/pkenv.git /root/.pkenv
-
-# ============================================================
-# Pulumi – always latest
-# ============================================================
-RUN curl -fsSL https://get.pulumi.com | sh
-
-# ============================================================
-# SOPS – always latest (or pinned)
-# ============================================================
-RUN if [ "${SOPS_VERSION}" = "latest" ]; then \
-         SOPS_VERSION=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | jq -r .tag_name); \
-       fi \
-    && curl -fsSL "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.${TARGETARCH}" \
-       -o /usr/local/bin/sops \
-    && chmod +x /usr/local/bin/sops
-
-# ============================================================
-# Terrascan
-# ============================================================
-RUN set -eux; \
-    arch="${TARGETARCH}"; \
-    # Map Docker arch names to Terrascan arch names
-    if [ "${arch}" = "amd64" ]; then arch="x86_64"; fi; \
-    if [ "${TERRASCAN_VERSION}" = "latest" ]; then \
-      # Get latest tag (e.g. v1.19.9) and strip leading 'v' for file name
-      TERRASCAN_TAG="$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest | jq -r .tag_name)"; \
-      TERRASCAN_FILE_VERSION="${TERRASCAN_TAG#v}"; \
-    else \
-      # Support both 'v1.19.9' and '1.19.9' as input
-      TERRASCAN_TAG="${TERRASCAN_VERSION}"; \
-      case "${TERRASCAN_TAG}" in \
-        v*) TERRASCAN_FILE_VERSION="${TERRASCAN_TAG#v}" ;; \
-        *)  TERRASCAN_FILE_VERSION="${TERRASCAN_TAG}" ;; \
-      esac; \
-    fi; \
-    TERRASCAN_URL="https://github.com/tenable/terrascan/releases/download/${TERRASCAN_TAG}/terrascan_${TERRASCAN_FILE_VERSION}_Linux_${arch}.tar.gz"; \
-    echo "Downloading Terrascan from ${TERRASCAN_URL}"; \
-    curl -fsSL "${TERRASCAN_URL}" -o /tmp/terrascan.tar.gz \
-    && tar -xzf /tmp/terrascan.tar.gz -C /tmp terrascan \
-    && install /tmp/terrascan /usr/local/bin/terrascan \
-    && rm -rf /tmp/terrascan*
-
-# ============================================================
-# FiloSottile/age
-# ============================================================
-RUN if [ "${AGE_VERSION}" = "latest" ]; then \
-         AGE_URL=$(curl -s https://api.github.com/repos/FiloSottile/age/releases/latest \
-           | jq -r --arg arch "${TARGETARCH}" '.assets[] | select(.name | test("linux-\($arch)\\.tar\\.gz$")) | .browser_download_url'); \
-       else \
-         AGE_URL="https://github.com/FiloSottile/age/releases/download/${AGE_VERSION}/age-${AGE_VERSION}-linux-${TARGETARCH}.tar.gz"; \
-       fi \
-    && curl -fsSL "${AGE_URL}" -o /tmp/age.tar.gz \
-    && tar -xzf /tmp/age.tar.gz -C /tmp \
-    && install /tmp/age/age        /usr/local/bin/age \
-    && install /tmp/age/age-keygen /usr/local/bin/age-keygen \
-    && rm -rf /tmp/age*
-
-# ============================================================
-# Microsoft sqlcmd
-# ============================================================
-RUN set -eux; \
-    arch="${TARGETARCH}"; \
-    # Determine tag to use (GitHub tag is like v1.9.0)
-    if [ "${SQLCMD_VERSION}" = "latest" ]; then \
-      SQLCMD_TAG="$(curl -s https://api.github.com/repos/microsoft/go-sqlcmd/releases/latest | jq -r .tag_name)"; \
-    else \
-      case "${SQLCMD_VERSION}" in \
-        v*) SQLCMD_TAG="${SQLCMD_VERSION}" ;; \
-        *)  SQLCMD_TAG="v${SQLCMD_VERSION}" ;; \
-      esac; \
-    fi; \
-    SQLCMD_URL="https://github.com/microsoft/go-sqlcmd/releases/download/${SQLCMD_TAG}/sqlcmd-linux-${arch}.tar.bz2"; \
-    echo "Downloading sqlcmd from ${SQLCMD_URL}"; \
-    curl -fsSL "${SQLCMD_URL}" -o /tmp/sqlcmd.tar.bz2 \
-    && tar -xjf /tmp/sqlcmd.tar.bz2 -C /tmp \
-    && install /tmp/sqlcmd /usr/local/bin/sqlcmd \
-    && rm -f /tmp/sqlcmd*
-
-# ============================================================
-# terraform-docs + tflint + pre-commit
-# ============================================================
-RUN pipx install pre-commit \
-    && pipx ensurepath \
-    && if [ "${TFDOCS_VERSION}" = "latest" ]; then \
-         TFDOCS_VERSION=$(curl -s https://api.github.com/repos/terraform-docs/terraform-docs/releases/latest | jq -r .tag_name); \
-       fi \
-    && curl -fsSL "https://github.com/terraform-docs/terraform-docs/releases/download/${TFDOCS_VERSION}/terraform-docs-${TFDOCS_VERSION}-$(uname -s | tr '[:upper:]' '[:lower:]')-${TARGETARCH}.tar.gz" \
-       -o /tmp/terraform-docs.tar.gz \
-    && tar -xzf /tmp/terraform-docs.tar.gz -C /tmp \
-    && install /tmp/terraform-docs /usr/local/bin/terraform-docs \
-    && rm -rf /tmp/terraform-docs* \
-    && curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
-
-# ============================================================
-# tenv + OpenTofu – managed via tenv (latest-stable by default)
-# ============================================================
-RUN set -eux; \
-    arch="${TARGETARCH}"; \
-    case "${arch}" in \
-      amd64|arm64) ;; \
-      *) echo "ERROR: Unsupported architecture for tenv: ${arch}"; exit 1;; \
-    esac; \
-    # Install tenv from GitHub releases (.deb package for Debian-based images), selecting correct asset via API
-    TENV_DEB_URL="$(curl -s https://api.github.com/repos/tofuutils/tenv/releases/latest \
-      | jq -r --arg arch "${arch}" '.assets[] | select(.name | endswith("_\($arch).deb")) | .browser_download_url')"; \
-    [ -n "${TENV_DEB_URL}" ] || { echo "ERROR: No tenv .deb asset found for arch ${arch}"; exit 1; }; \
-    echo "Downloading tenv from ${TENV_DEB_URL}"; \
-    curl -fsSL "${TENV_DEB_URL}" -o /tmp/tenv.deb; \
-    dpkg -i /tmp/tenv.deb; \
-    rm -f /tmp/tenv.deb; \
-    tenv version; \
-    # Install and set default OpenTofu version via tenv
-    tenv tofu install latest-stable; \
-    tenv tofu use latest-stable 
+COPY docker/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
+COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooling.sh
+RUN chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh \
+    && /tmp/install-docker-azcopy-acr.sh \
+    && /tmp/install-common-tooling.sh \
+    && rm -f /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh
 
 # ============================================================
 # Terratest + parser (latest or pinned tag)
 # ============================================================
-RUN if [ "${TERRATEST_VERSION}" = "latest" ]; then \
-         TERRATEST_VERSION=$(curl -s https://api.github.com/repos/gruntwork-io/terratest/releases/latest | jq -r .tag_name); \
-       fi \
-    && go install "github.com/gruntwork-io/terratest/cmd/terratest_log_parser@${TERRATEST_VERSION}" \
-    && mkdir -p /tmp/terratest-bootstrap \
-    && cd /tmp/terratest-bootstrap \
-    && go mod init terratest-bootstrap \
-    && go get "github.com/gruntwork-io/terratest@${TERRATEST_VERSION}" \
-    && rm -rf /tmp/terratest-bootstrap
+COPY docker/scripts/install-terratest.sh /tmp/install-terratest.sh
+RUN chmod +x /tmp/install-terratest.sh && /tmp/install-terratest.sh && rm -f /tmp/install-terratest.sh
 
 # ============================================================
 # Basic version smoke test (fails build if broken)
@@ -198,6 +88,9 @@ RUN set -eux \
     && go version \
     && terratest_log_parser --help >/dev/null \
     && python3 --version \
+    && docker --version \
+    && azcopy --version \
+    && acr-cli version \
     && az --version | head -n1 \
     && pkenv --version \
     && pulumi version \
@@ -208,4 +101,5 @@ RUN set -eux \
     && age-keygen --version \
     && sqlcmd --version \
     && terraform-docs --version \
-    && tflint --version 
+    && tflint --version \
+    && tofu --version

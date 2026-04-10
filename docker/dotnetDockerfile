@@ -1,11 +1,36 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0
+# syntax=docker/dockerfile:1
+# Multi-platform: use buildx, e.g.
+#   docker buildx build --platform linux/amd64,linux/arm64 -f dotnetDockerfile -t your-registry/dotnet-tools:latest --push .
+# Binary install steps support linux/amd64 and linux/arm64 only (not linux/arm/v7).
+FROM mcr.microsoft.com/dotnet/sdk:9.0
 
+ARG TARGETARCH
 ARG SOPS_VERSION=v3.11.0
+# Pin to a release that publishes linux-x64 and linux-arm64 tarballs (≥ 7.0.3 per Az Gov Viz docs)
+ARG PWSH_VERSION=7.6.0
 
 RUN apt-get update && apt-get install -y \
 		curl wget uuid-dev git zip unzip gpg tar ca-certificates jq \
-        apt-transport-https openssh-client openssh-server iproute2 dnsutils \
+		apt-transport-https libicu72 openssh-client openssh-server iproute2 dnsutils \
 	&& rm -rf /var/lib/apt/lists/*
+
+# PowerShell 7+ from GitHub tarballs — Microsoft repo has no `powershell` .deb for arm64 on Debian 12
+# https://github.com/JulianHayward/Azure-MG-Sub-Governance-Reporting/blob/master/setup/console.md
+RUN set -eux; \
+	case "${TARGETARCH}" in \
+		amd64) PS_TAR_ARCH=x64 ;; \
+		arm64) PS_TAR_ARCH=arm64 ;; \
+		*) echo "unsupported TARGETARCH for PowerShell: ${TARGETARCH}" >&2; exit 1 ;; \
+	esac; \
+	curl -fsSL "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-${PS_TAR_ARCH}.tar.gz" -o /tmp/powershell.tgz; \
+	mkdir -p /opt/microsoft/powershell7; \
+	tar -xzf /tmp/powershell.tgz -C /opt/microsoft/powershell7; \
+	chmod +x /opt/microsoft/powershell7/pwsh; \
+	ln -sf /opt/microsoft/powershell7/pwsh /usr/bin/pwsh; \
+	rm /tmp/powershell.tgz
+
+# Azure PowerShell (includes Az.Accounts) + AzAPICall — console.md prerequisites; JSON exec form so $ is interpreted by pwsh
+RUN ["pwsh", "-NoProfile", "-Command", "$ProgressPreference = 'SilentlyContinue'; Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; Install-Module -Name Az -Scope AllUsers -Repository PSGallery -Force; Install-Module -Name AzAPICall -Scope AllUsers -Repository PSGallery -Force"]
 
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && git clone --depth=1 https://github.com/tfutils/tfenv.git ~/.tfenv \
@@ -19,12 +44,20 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash \
     && echo 'export PATH=$PATH:$HOME/.pulumi/bin' >> ~/.bashrc \
     && ln -s ~/.pkenv/bin/* /usr/local/bin
 
-RUN curl -o /usr/local/bin/sops -L https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64 \
-    &&  chmod +x /usr/local/bin/sops
-
-RUN curl -L "$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest | grep -o -E "https://.+?_Linux_x86_64.tar.gz")" > terrascan.tar.gz \
-    && tar -xf terrascan.tar.gz terrascan \
-    && rm terrascan.tar.gz \
-    && install terrascan /usr/local/bin \
-    && rm terrascan \
-    && terrascan
+RUN set -eux; \
+	case "${TARGETARCH}" in \
+		amd64) SOPS_ARCH=amd64; TERRASCAN_ARCH=Linux_x86_64 ;; \
+		arm64) SOPS_ARCH=arm64; TERRASCAN_ARCH=Linux_arm64 ;; \
+		*) echo "unsupported TARGETARCH for sops/terrascan (use linux/amd64 or linux/arm64): ${TARGETARCH}" >&2; exit 1 ;; \
+	esac; \
+	curl -fsSL "https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.${SOPS_ARCH}" -o /usr/local/bin/sops; \
+	chmod +x /usr/local/bin/sops; \
+	TERRASCAN_URL="$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest \
+		| grep -oE "https://[^\"]+${TERRASCAN_ARCH}\\.tar\\.gz" | head -1)"; \
+	test -n "${TERRASCAN_URL}"; \
+	curl -fsSL "${TERRASCAN_URL}" -o terrascan.tar.gz; \
+	tar -xf terrascan.tar.gz terrascan; \
+	rm terrascan.tar.gz; \
+	install terrascan /usr/local/bin; \
+	rm terrascan; \
+	terrascan version
