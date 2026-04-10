@@ -59,10 +59,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ============================================================
 # Node.js / Yarn via Corepack + latest npm
 # ============================================================
-RUN npm install -g corepack \
-    && corepack enable \
-    && corepack prepare yarn@stable --activate \
-    && npm install -g npm@latest
+RUN npm install -g npm@latest
 
 # ============================================================
 # Azure CLI
