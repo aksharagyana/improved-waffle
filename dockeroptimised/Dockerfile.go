@@ -62,9 +62,7 @@ RUN export GITHUB_TOKEN="${GITHUB_TOKEN}" \
 RUN set -eux; \
     ttv="${TERRATEST_VERSION}"; \
     if [ "$$ttv" = "latest" ]; then \
-      eff=$$(curl -fsSL -o /dev/null -w '%{url_effective}' --max-time 120 -H "User-Agent: improved-waffle-docker-build" "https://github.com/gruntwork-io/terratest/releases/latest"); \
-      ttv=$${eff##*/tag/}; \
-      ttv=$${ttv%%\?*}; \
+      ttv=$$(curl -fsSL -o /dev/null -w '%{url_effective}' --max-time 120 -H "User-Agent: improved-waffle-docker-build" "https://github.com/gruntwork-io/terratest/releases/latest" | sed -e 's,.*/,,' -e 's,[?#].*,,'); \
     fi; \
     go install "github.com/gruntwork-io/terratest/cmd/terratest_log_parser@$$ttv" \
     && mkdir -p /tmp/terratest-bootstrap \
