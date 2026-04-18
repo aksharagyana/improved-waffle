@@ -21,6 +21,7 @@ ENV TERRASCAN_VERSION=${TERRASCAN_VERSION}
 ENV AGE_VERSION=${AGE_VERSION}
 ENV SQLCMD_VERSION=${SQLCMD_VERSION}
 ENV TFDOCS_VERSION=${TFDOCS_VERSION}
+ENV TERRATEST_VERSION=${TERRATEST_VERSION}
 
 RUN echo "Cache bust timestamp: ${CACHEBUST}" > /dev/null
 
@@ -47,22 +48,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
-COPY docker/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
+COPY dockeroptimised/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
 COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooling.sh
-RUN chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh \
+COPY dockeroptimised/scripts/install-k8s-oci-tooling.sh /tmp/install-k8s-oci-tooling.sh
+COPY dockeroptimised/scripts/install-terratest-go.sh /tmp/install-terratest-go.sh
+ARG GITHUB_TOKEN=""
+RUN export GITHUB_TOKEN="${GITHUB_TOKEN}" \
+    && chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh \
     && /tmp/install-docker-azcopy-acr.sh \
     && /tmp/install-common-tooling.sh \
-    && rm -f /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh
+    && /tmp/install-k8s-oci-tooling.sh \
+    && rm -f /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh
 
-RUN set -eux; \
-    ttv="${TERRATEST_VERSION}"; \
-    if [ "$$ttv" = "latest" ]; then ttv=$$(curl -s https://api.github.com/repos/gruntwork-io/terratest/releases/latest | jq -r .tag_name); fi; \
-    go install "github.com/gruntwork-io/terratest/cmd/terratest_log_parser@$$ttv" \
-    && mkdir -p /tmp/terratest-bootstrap \
-    && cd /tmp/terratest-bootstrap \
-    && go mod init terratest-bootstrap \
-    && go get "github.com/gruntwork-io/terratest@$$ttv" \
-    && rm -rf /tmp/terratest-bootstrap
+RUN chmod +x /tmp/install-terratest-go.sh \
+    && TERRATEST_VERSION="${TERRATEST_VERSION}" /tmp/install-terratest-go.sh \
+    && rm -f /tmp/install-terratest-go.sh
 
 RUN set -eux \
     && go version \
@@ -82,4 +82,8 @@ RUN set -eux \
     && sqlcmd --version \
     && terraform-docs --version \
     && tflint --version \
-    && tofu --version
+    && buildah version \
+    && skopeo --version \
+    && kubectl version --client \
+    && helm version --short \
+    && k9s version

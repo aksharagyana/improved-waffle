@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
+# Resolve Terratest tag (latest → GitHub redirect) and install CLI + warm module cache.
 set -euxo pipefail
+
 ttv="${TERRATEST_VERSION:-latest}"
 if [[ "${ttv}" == "latest" ]]; then
-  ttv="$(curl -s https://api.github.com/repos/gruntwork-io/terratest/releases/latest | jq -r .tag_name)"
+  ttv="$(curl -fsSL -o /dev/null -w '%{url_effective}' --max-time 120 \
+    -H "User-Agent: improved-waffle-docker-build" \
+    "https://github.com/gruntwork-io/terratest/releases/latest" \
+    | sed -e 's,.*/,,' -e 's,[?#].*,,')"
 fi
+
 go install "github.com/gruntwork-io/terratest/cmd/terratest_log_parser@${ttv}"
 mkdir -p /tmp/terratest-bootstrap
 cd /tmp/terratest-bootstrap

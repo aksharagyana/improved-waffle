@@ -44,18 +44,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable \
-    && corepack prepare yarn@stable --activate \
-    && npm install -g npm@latest
 
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
-COPY docker/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
+COPY dockeroptimised/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
 COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooling.sh
-RUN chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh \
+COPY dockeroptimised/scripts/install-k8s-oci-tooling.sh /tmp/install-k8s-oci-tooling.sh
+ARG GITHUB_TOKEN=""
+RUN export GITHUB_TOKEN="${GITHUB_TOKEN}" \
+    && chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh \
     && /tmp/install-docker-azcopy-acr.sh \
     && /tmp/install-common-tooling.sh \
-    && rm -f /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh
+    && /tmp/install-k8s-oci-tooling.sh \
+    && rm -f /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh
 
 RUN set -eux \
     && node --version \
@@ -76,4 +77,8 @@ RUN set -eux \
     && sqlcmd --version \
     && terraform-docs --version \
     && tflint --version \
-    && tofu --version
+    && buildah version \
+    && skopeo --version \
+    && kubectl version --client \
+    && helm version --short \
+    && k9s version
