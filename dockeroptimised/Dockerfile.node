@@ -44,9 +44,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && update-ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN corepack enable \
-    && corepack prepare yarn@stable --activate \
-    && npm install -g npm@latest
 
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
