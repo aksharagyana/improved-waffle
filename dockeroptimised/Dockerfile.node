@@ -50,7 +50,9 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 COPY dockeroptimised/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
 COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooling.sh
 COPY dockeroptimised/scripts/install-k8s-oci-tooling.sh /tmp/install-k8s-oci-tooling.sh
-RUN chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh \
+ARG GITHUB_TOKEN=""
+RUN export GITHUB_TOKEN="${GITHUB_TOKEN}" \
+    && chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh \
     && /tmp/install-docker-azcopy-acr.sh \
     && /tmp/install-common-tooling.sh \
     && /tmp/install-k8s-oci-tooling.sh \
@@ -75,7 +77,6 @@ RUN set -eux \
     && sqlcmd --version \
     && terraform-docs --version \
     && tflint --version \
-    && tofu --version \
     && buildah version \
     && skopeo --version \
     && kubectl version --client \

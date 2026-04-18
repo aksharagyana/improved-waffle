@@ -43,6 +43,7 @@ build_images:
           --tag "$TARGET_REGISTRY/$imagename:$datetag" \
           --tag "$TARGET_REGISTRY/$imagename:latest" \
           --build-arg CACHEBUST="$cachebust" \
+          --build-arg "GITHUB_TOKEN=${GITHUB_TOKEN}" \
           --push \
           -f "$dockerfile" \
           .

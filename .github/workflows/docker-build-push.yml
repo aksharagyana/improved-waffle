@@ -89,6 +89,7 @@ jobs:
             --tag "ghcr.io/${{ github.repository }}/$imagename:$datetag" \
             --tag "ghcr.io/${{ github.repository }}/$imagename:latest" \
             --build-arg CACHEBUST="$cachebust" \
+            --build-arg "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" \
             --push \
             -f "$dockerfile" \
             .

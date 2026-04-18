@@ -51,7 +51,9 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 COPY dockeroptimised/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
 COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooling.sh
 COPY dockeroptimised/scripts/install-k8s-oci-tooling.sh /tmp/install-k8s-oci-tooling.sh
-RUN chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh \
+ARG GITHUB_TOKEN=""
+RUN export GITHUB_TOKEN="${GITHUB_TOKEN}" \
+    && chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh \
     && /tmp/install-docker-azcopy-acr.sh \
     && /tmp/install-common-tooling.sh \
     && /tmp/install-k8s-oci-tooling.sh \
@@ -59,7 +61,11 @@ RUN chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /t
 
 RUN set -eux; \
     ttv="${TERRATEST_VERSION}"; \
-    if [ "$$ttv" = "latest" ]; then ttv=$$(curl -s https://api.github.com/repos/gruntwork-io/terratest/releases/latest | jq -r .tag_name); fi; \
+    if [ "$$ttv" = "latest" ]; then \
+      eff=$$(curl -fsSL -o /dev/null -w '%{url_effective}' --max-time 120 -H "User-Agent: improved-waffle-docker-build" "https://github.com/gruntwork-io/terratest/releases/latest"); \
+      ttv=$${eff##*/tag/}; \
+      ttv=$${ttv%%\?*}; \
+    fi; \
     go install "github.com/gruntwork-io/terratest/cmd/terratest_log_parser@$$ttv" \
     && mkdir -p /tmp/terratest-bootstrap \
     && cd /tmp/terratest-bootstrap \
@@ -85,7 +91,6 @@ RUN set -eux \
     && sqlcmd --version \
     && terraform-docs --version \
     && tflint --version \
-    && tofu --version \
     && buildah version \
     && skopeo --version \
     && kubectl version --client \
