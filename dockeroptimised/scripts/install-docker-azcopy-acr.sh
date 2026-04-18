@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Docker CE CLI + Compose plugin, AzCopy v10, ACR CLI — Debian-based images only.
-# Set INSTALL_DOCKER_CLI=0 to skip Docker packages (e.g. if unused); azcopy/acr always install.
+# Docker CE CLI + Compose, AzCopy v10, ACR CLI (https://github.com/Azure/acr-cli), and Helm.
+# Helm + acr-cli are commonly used with docker(1) for OCI charts and registry workflows; install Helm here
+# (after Docker CE CLI from Docker's apt repo) so we never pull Debian's docker.io over docker-ce-cli.
+# Set INSTALL_DOCKER_CLI=0 to skip Docker packages (azcopy, acr-cli, and Helm still install).
+# Follow with install-common-tooling.sh then install-k8s-oci-tooling.sh for the rest of the stack.
 set -euxo pipefail
 
 resolve_arch() {
@@ -49,3 +52,17 @@ tar -xzf /tmp/acr-cli.tgz -C /tmp
 install /tmp/acr-cli /usr/local/bin/acr-cli
 ln -sf /usr/local/bin/acr-cli /usr/local/bin/acr
 rm -f /tmp/acr-cli.tgz /tmp/acr-cli
+
+# ------------------------------------------------------------
+# Helm (get.helm.sh) — after Docker CE CLI + acr-cli for registry/OCI flows that use docker + helm together
+# ------------------------------------------------------------
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  gh_hdr=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+else
+  gh_hdr=()
+fi
+HELM_TAG="$(curl -fsSL "${gh_hdr[@]}" https://api.github.com/repos/helm/helm/releases/latest | jq -r .tag_name)"
+curl -fsSL "https://get.helm.sh/helm-${HELM_TAG}-linux-${ARCH}.tar.gz" -o /tmp/helm.tgz
+tar -xzf /tmp/helm.tgz -C /tmp
+install "/tmp/linux-${ARCH}/helm" /usr/local/bin/helm
+rm -rf /tmp/helm.tgz "/tmp/linux-${ARCH}"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Shared IaC/tooling for Debian-based CI images (pkenv, Pulumi, SOPS, Terraform stack, …).
-# Dockerfile order: Azure CLI (RUN) → install-docker-azcopy-acr.sh → this script.
+# Dockerfile order: Azure CLI (RUN) → install-docker-azcopy-acr.sh (Docker CLI, azcopy, acr-cli, Helm) → this script → install-k8s-oci-tooling.sh.
 # Expects: apt deps already installed (curl, jq, git, python3, pipx, build-essential, …).
 # Uses TARGETARCH when set (Docker BuildKit); otherwise infers from uname.
 
