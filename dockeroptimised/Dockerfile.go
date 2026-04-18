@@ -21,6 +21,7 @@ ENV TERRASCAN_VERSION=${TERRASCAN_VERSION}
 ENV AGE_VERSION=${AGE_VERSION}
 ENV SQLCMD_VERSION=${SQLCMD_VERSION}
 ENV TFDOCS_VERSION=${TFDOCS_VERSION}
+ENV TERRATEST_VERSION=${TERRATEST_VERSION}
 
 RUN echo "Cache bust timestamp: ${CACHEBUST}" > /dev/null
 
@@ -47,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
-COPY docker/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
+COPY dockeroptimised/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
 COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooling.sh
 RUN chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh \
     && /tmp/install-docker-azcopy-acr.sh \

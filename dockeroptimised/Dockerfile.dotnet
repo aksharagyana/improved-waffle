@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Multi-platform: use buildx, e.g.
-#   docker buildx build --platform linux/amd64,linux/arm64 -f dotnetDockerfile -t your-registry/dotnet-tools:latest --push .
+#   docker buildx build --platform linux/amd64,linux/arm64 -f dockeroptimised/Dockerfile.dotnet -t your-registry/dotnet:latest --push .
 # Binary install steps support linux/amd64 and linux/arm64 only (not linux/arm/v7).
 FROM mcr.microsoft.com/dotnet/sdk:9.0
 

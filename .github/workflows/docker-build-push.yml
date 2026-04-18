@@ -63,24 +63,33 @@ jobs:
         # Get current date in YYMMDD format
         datetag=$(date +%y%m%d%H%M%S)
         cachebust="${{ steps.cachebust.outputs.value }}"
-        for dockerfile in docker/*; do
-          if [[ -f "$dockerfile" ]]; then
-            # Extract image name by removing 'Dockerfile' from the filename
-            imagename=$(basename "$dockerfile" | sed 's/Dockerfile$//')
-            # Set platforms based on image name for extensibility
-            if [[ "$imagename" == "dotnet" ]]; then
-              platforms="linux/amd64"
-            else
-              platforms="linux/amd64,linux/arm64"
-            fi
-            echo "Building image: $imagename from $dockerfile with platforms: $platforms"
-            docker buildx build \
-              --platform "$platforms" \
-              --tag "ghcr.io/${{ github.repository }}/$imagename:$datetag" \
-              --tag "ghcr.io/${{ github.repository }}/$imagename:latest" \
-              --build-arg CACHEBUST="$cachebust" \
-              --push \
-              -f "$dockerfile" \
-              .
+        # dockeroptimised: explicit Dockerfile → registry image name (preserves ghcr tags: py, node, …)
+        specs=(
+          "dockeroptimised/Dockerfile.python:py"
+          "dockeroptimised/Dockerfile.node:node"
+          "dockeroptimised/Dockerfile.go:go"
+          "dockeroptimised/Dockerfile.debianazsql:debianazsql"
+          "dockeroptimised/Dockerfile.dotnet:dotnet"
+        )
+        for entry in "${specs[@]}"; do
+          dockerfile="${entry%%:*}"
+          imagename="${entry##*:}"
+          if [[ ! -f "$dockerfile" ]]; then
+            echo "ERROR: missing $dockerfile" >&2
+            exit 1
           fi
+          if [[ "$imagename" == "dotnet" ]]; then
+            platforms="linux/amd64"
+          else
+            platforms="linux/amd64,linux/arm64"
+          fi
+          echo "Building image: $imagename from $dockerfile with platforms: $platforms"
+          docker buildx build \
+            --platform "$platforms" \
+            --tag "ghcr.io/${{ github.repository }}/$imagename:$datetag" \
+            --tag "ghcr.io/${{ github.repository }}/$imagename:latest" \
+            --build-arg CACHEBUST="$cachebust" \
+            --push \
+            -f "$dockerfile" \
+            .
         done
