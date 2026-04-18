@@ -51,6 +51,7 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 COPY dockeroptimised/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
 COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooling.sh
 COPY dockeroptimised/scripts/install-k8s-oci-tooling.sh /tmp/install-k8s-oci-tooling.sh
+COPY dockeroptimised/scripts/install-terratest-go.sh /tmp/install-terratest-go.sh
 ARG GITHUB_TOKEN=""
 RUN export GITHUB_TOKEN="${GITHUB_TOKEN}" \
     && chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh \
@@ -59,17 +60,9 @@ RUN export GITHUB_TOKEN="${GITHUB_TOKEN}" \
     && /tmp/install-k8s-oci-tooling.sh \
     && rm -f /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh
 
-RUN set -eux; \
-    ttv="${TERRATEST_VERSION}"; \
-    if [ "$$ttv" = "latest" ]; then \
-      ttv=$$(curl -fsSL -o /dev/null -w '%{url_effective}' --max-time 120 -H "User-Agent: improved-waffle-docker-build" "https://github.com/gruntwork-io/terratest/releases/latest" | sed -e 's,.*/,,' -e 's,[?#].*,,'); \
-    fi; \
-    go install "github.com/gruntwork-io/terratest/cmd/terratest_log_parser@$$ttv" \
-    && mkdir -p /tmp/terratest-bootstrap \
-    && cd /tmp/terratest-bootstrap \
-    && go mod init terratest-bootstrap \
-    && go get "github.com/gruntwork-io/terratest@$$ttv" \
-    && rm -rf /tmp/terratest-bootstrap
+RUN chmod +x /tmp/install-terratest-go.sh \
+    && TERRATEST_VERSION="${TERRATEST_VERSION}" /tmp/install-terratest-go.sh \
+    && rm -f /tmp/install-terratest-go.sh
 
 RUN set -eux \
     && go version \
