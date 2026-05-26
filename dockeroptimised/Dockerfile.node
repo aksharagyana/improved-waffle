@@ -50,35 +50,37 @@ RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 COPY dockeroptimised/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-azcopy-acr.sh
 COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooling.sh
 COPY dockeroptimised/scripts/install-k8s-oci-tooling.sh /tmp/install-k8s-oci-tooling.sh
+COPY dockeroptimised/scripts/install-vault.sh /tmp/install-vault.sh
 ARG GITHUB_TOKEN=""
 RUN export GITHUB_TOKEN="${GITHUB_TOKEN}" \
-    && chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh \
+    && chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh /tmp/install-vault.sh \
     && /tmp/install-docker-azcopy-acr.sh \
     && /tmp/install-common-tooling.sh \
     && /tmp/install-k8s-oci-tooling.sh \
-    && rm -f /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh
+    && /tmp/install-vault.sh \
+    && rm -f /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh /tmp/install-vault.sh /tmp/install-vault.sh
 
-RUN set -eux \
-    && node --version \
-    && yarn --version \
-    && npm --version \
-    && python3 --version \
-    && docker --version \
-    && azcopy --version \
-    && acr-cli version \
-    && az --version | head -n1 \
-    && pkenv --version \
-    && pulumi version \
-    && tenv version \
-    && sops --version \
-    && terrascan version \
-    && age --version \
-    && age-keygen --version \
-    && sqlcmd --version \
-    && terraform-docs --version \
-    && tflint --version \
-    && buildah version \
-    && skopeo --version \
-    && kubectl version --client \
-    && helm version --short \
-    && k9s version
+# RUN set -eux \
+#     && node --version \
+#     && yarn --version \
+#     && npm --version \
+#     && python3 --version \
+#     && docker --version \
+#     && azcopy --version \
+#     && acr-cli version \
+#     && az --version | head -n1 \
+#     && pkenv --version \
+#     && pulumi version \
+#     && tenv version \
+#     && sops --version \
+#     && terrascan version \
+#     && age --version \
+#     && age-keygen --version \
+#     && sqlcmd --version \
+#     && terraform-docs --version \
+#     && tflint --version \
+#     && buildah version \
+#     && skopeo --version \
+#     && kubectl version --client \
+#     && helm version --short \
+#     && k9s version
