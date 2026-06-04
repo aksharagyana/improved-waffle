@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # golang:latest + shared tooling + Terratest (install-common-tooling.sh)
 FROM golang:latest
 
@@ -53,17 +54,16 @@ COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooli
 COPY dockeroptimised/scripts/install-k8s-oci-tooling.sh /tmp/install-k8s-oci-tooling.sh
 COPY dockeroptimised/scripts/install-terratest-go.sh /tmp/install-terratest-go.sh
 COPY dockeroptimised/scripts/install-vault.sh /tmp/install-vault.sh
-ARG GITHUB_TOKEN=""
-RUN export GITHUB_TOKEN="${GITHUB_TOKEN}" \
-    && chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh /tmp/install-vault.sh \
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    export GITHUB_TOKEN="$(cat /run/secrets/GITHUB_TOKEN 2>/dev/null || true)" \
+    && chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh /tmp/install-vault.sh /tmp/install-terratest-go.sh \
     && /tmp/install-docker-azcopy-acr.sh \
     && /tmp/install-common-tooling.sh \
     && /tmp/install-k8s-oci-tooling.sh \
     && /tmp/install-vault.sh \
     && rm -f /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh /tmp/install-vault.sh
 
-RUN chmod +x /tmp/install-terratest-go.sh \
-    && TERRATEST_VERSION="${TERRATEST_VERSION}" /tmp/install-terratest-go.sh \
+RUN TERRATEST_VERSION="${TERRATEST_VERSION}" /tmp/install-terratest-go.sh \
     && rm -f /tmp/install-terratest-go.sh
 
 # RUN set -eux \

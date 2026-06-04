@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # node:24-bookworm-slim + shared tooling (Docker CLI already covered by install script)
 FROM node:current-trixie
 
@@ -51,8 +52,8 @@ COPY dockeroptimised/scripts/install-docker-azcopy-acr.sh /tmp/install-docker-az
 COPY dockeroptimised/scripts/install-common-tooling.sh /tmp/install-common-tooling.sh
 COPY dockeroptimised/scripts/install-k8s-oci-tooling.sh /tmp/install-k8s-oci-tooling.sh
 COPY dockeroptimised/scripts/install-vault.sh /tmp/install-vault.sh
-ARG GITHUB_TOKEN=""
-RUN export GITHUB_TOKEN="${GITHUB_TOKEN}" \
+RUN --mount=type=secret,id=GITHUB_TOKEN \
+    export GITHUB_TOKEN="$(cat /run/secrets/GITHUB_TOKEN 2>/dev/null || true)" \
     && chmod +x /tmp/install-docker-azcopy-acr.sh /tmp/install-common-tooling.sh /tmp/install-k8s-oci-tooling.sh /tmp/install-vault.sh \
     && /tmp/install-docker-azcopy-acr.sh \
     && /tmp/install-common-tooling.sh \
