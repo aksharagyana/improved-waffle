@@ -5,6 +5,8 @@ FROM node:current-trixie
 ARG TARGETPLATFORM
 ARG TARGETARCH
 ARG CACHEBUST=2026-02-23
+ARG AWS_CLI_VERSION=latest
+ARG MONACO_VERSION=latest
 
 ARG SOPS_VERSION=latest
 ARG TERRASCAN_VERSION=latest
@@ -85,3 +87,11 @@ RUN --mount=type=secret,id=GITHUB_TOKEN \
 #     && kubectl version --client \
 #     && helm version --short \
 #     && k9s version
+
+# Additive cloud tooling; retain all existing Azure/Kubernetes/IaC installers.
+COPY dockeroptimised/scripts/install-cloud-observability-tooling.sh /tmp/install-cloud-observability-tooling.sh
+COPY dockeroptimised/scripts/verify-devops-tooling.sh /usr/local/bin/verify-devops-tooling
+RUN bash /tmp/install-cloud-observability-tooling.sh \
+    && rm /tmp/install-cloud-observability-tooling.sh \
+    && chmod +x /usr/local/bin/verify-devops-tooling \
+    && verify-devops-tooling node

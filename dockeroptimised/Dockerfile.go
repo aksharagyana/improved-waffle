@@ -89,3 +89,8 @@ RUN TERRATEST_VERSION="${TERRATEST_VERSION}" /tmp/install-terratest-go.sh \
 #     && kubectl version --client \
 #     && helm version --short \
 #     && k9s version
+
+# Full network diagnostics, including the Telnet client.
+COPY dockeroptimised/scripts/install-network-tooling.sh /tmp/install-network-tooling.sh
+RUN bash /tmp/install-network-tooling.sh \
+    && rm /tmp/install-network-tooling.sh
