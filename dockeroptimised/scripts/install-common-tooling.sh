@@ -171,7 +171,28 @@ curl_release_get "https://github.com/terraform-docs/terraform-docs/releases/down
 tar -xzf /tmp/terraform-docs.tar.gz -C /tmp
 install /tmp/terraform-docs /usr/local/bin/terraform-docs
 rm -rf /tmp/terraform-docs*
-curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+# TFLint no longer publishes install_linux.sh. Install its release binary directly.
+(
+  tflint_tag="$(github_latest_tag "terraform-linters/tflint")"
+  [[ "$tflint_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    echo "ERROR: Invalid TFLint release tag: $tflint_tag" >&2; exit 1;
+  }
+  tflint_dir="$(mktemp -d)"
+  trap 'rm -rf "$tflint_dir"' EXIT
+  tflint_asset="tflint_linux_${ARCH}.zip"
+  tflint_url="https://github.com/terraform-linters/tflint/releases/download/${tflint_tag}"
+  curl_release_get "$tflint_url/$tflint_asset" -o "$tflint_dir/$tflint_asset"
+  curl_release_get "$tflint_url/checksums.txt" -o "$tflint_dir/checksums.txt"
+  tflint_checksum="$(awk -v name="$tflint_asset" '$2 == name || $2 == "*" name {print $1}' "$tflint_dir/checksums.txt")"
+  [[ "$tflint_checksum" =~ ^[a-fA-F0-9]{64}$ ]] || {
+    echo "ERROR: Missing or ambiguous TFLint checksum" >&2; exit 1;
+  }
+  cd "$tflint_dir"
+  printf '%s  %s\n' "$tflint_checksum" "$tflint_asset" | sha256sum --check -
+  unzip -q "$tflint_asset" tflint
+  install -m 0755 tflint /usr/local/bin/tflint
+  tflint --version
+)
 
 # ------------------------------------------------------------
 # tenv (OpenTofu/terraform/… version manager; install runtimes with tenv at runtime, e.g. tenv tofu install)

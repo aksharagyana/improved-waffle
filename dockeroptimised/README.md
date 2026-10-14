@@ -11,7 +11,7 @@ network probes may require additional container capabilities at runtime.
 
 Both Dockerfiles support Linux AMD64 and ARM64. The Go image also includes the full network diagnostics suite plus `telnet`,
 without the AWS/Monaco/GitLab additions. The .NET and Debian Azure SQL image
-definitions are unchanged. The existing GitHub Actions matrix builds both architectures
+definitions are unchanged. GitHub Actions currently builds only `go`, `node`, and `py`, each for both architectures
 and publishes `ghcr.io/aksharagyana/improved-waffle/py:latest` and
 `ghcr.io/aksharagyana/improved-waffle/node:latest` on main pushes and scheduled
 builds. Pull request builds do not publish images.

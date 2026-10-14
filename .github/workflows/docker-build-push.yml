@@ -69,12 +69,6 @@ jobs:
           - image: go
             dockerfile: dockeroptimised/Dockerfile.go
             platforms: linux/amd64,linux/arm64
-          - image: debianazsql
-            dockerfile: dockeroptimised/Dockerfile.debianazsql
-            platforms: linux/amd64,linux/arm64
-          - image: dotnet
-            dockerfile: dockeroptimised/Dockerfile.dotnet
-            platforms: linux/amd64,linux/arm64
 
     steps:
     - name: Checkout code
