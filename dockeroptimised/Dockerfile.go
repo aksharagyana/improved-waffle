@@ -11,7 +11,8 @@ ARG TERRASCAN_VERSION=latest
 ARG AGE_VERSION=latest
 ARG SQLCMD_VERSION=latest
 ARG TFDOCS_VERSION=latest
-ARG TERRATEST_VERSION=latest
+# v2 removed the log-parser CLI; retain its compatible root-module release.
+ARG TERRATEST_VERSION=v1.0.1
 ARG PULUMI_VERSION=latest
 ARG OPENTOFU_VERSION=latest
 

@@ -83,3 +83,13 @@ Use the existing curl/jq tools for direct Dynatrace API calls.
 - [Dynatrace Monaco download and verification](https://docs.dynatrace.com/docs/deliver/configuration-as-code/monaco/installation/download-monaco)
 - [GitLab CLI](https://gitlab.com/gitlab-org/cli)
 - [Debian glab package](https://packages.debian.org/trixie/glab)
+
+## Terratest in the Go image
+
+`TERRATEST_VERSION` defaults to `v1.0.1`, the compatible root-module release
+containing `terratest_log_parser`. Terratest v2 removed this CLI and split its
+libraries into separate `modules/<name>/v2` Go modules. The build accepts explicit
+v0/v1 versions; `latest` resolves the original module through Go, not GitHub's
+latest-release redirect. The parser is installed in `/usr/local/bin` and checked
+during the build. Projects can independently depend on v2 libraries in their own
+`go.mod`; they do not need to use the parser's version.
