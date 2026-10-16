@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-# python:3.14-trixie + shared tooling
-FROM python:3.14-trixie
+# python:3-slim-trixie + shared tooling
+FROM python:3-slim-trixie
 
 ARG TARGETPLATFORM
 ARG TARGETARCH
